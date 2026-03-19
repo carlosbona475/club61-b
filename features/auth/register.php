@@ -7,7 +7,6 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 }
 
 $errorMessage = '';
-$successMessage = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -19,7 +18,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = registerUser($email, $password);
 
         if ($result['success']) {
-            $successMessage = 'Conta criada com sucesso. Faça login para continuar.';
+            header('Location: /features/auth/login.php');
+            exit;
         } else {
             $errorMessage = $result['error'] ?? 'Nao foi possivel criar a conta.';
         }
@@ -51,9 +51,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Registro</h1>
     <?php if ($errorMessage !== ''): ?>
         <p style="color: #ff6b6b;"><?php echo htmlspecialchars($errorMessage, ENT_QUOTES, 'UTF-8'); ?></p>
-    <?php endif; ?>
-    <?php if ($successMessage !== ''): ?>
-        <p style="color: #51cf66;"><?php echo htmlspecialchars($successMessage, ENT_QUOTES, 'UTF-8'); ?></p>
     <?php endif; ?>
     <form action="" method="POST">
         <input type="text" name="invite_code" placeholder="Código de Convite" required />

@@ -6,7 +6,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
 }
 
-$errorMessage = '';
+$errorMessage = "";
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = trim($_POST['email'] ?? '');
@@ -49,8 +49,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 </head>
 <body>
     <h1>Login</h1>
-    <?php if ($errorMessage !== ''): ?>
-        <p style="color: #ff6b6b;"><?php echo htmlspecialchars($errorMessage, ENT_QUOTES, 'UTF-8'); ?></p>
+    <?php if ($errorMessage): ?>
+    <div style="color:red">
+        <?= htmlspecialchars($errorMessage, ENT_QUOTES, 'UTF-8') ?>
+    </div>
     <?php endif; ?>
     <form action="" method="POST">
         <input type="text" name="email" placeholder="Email" required />

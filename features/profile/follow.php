@@ -29,6 +29,8 @@ $data = [
 
 $ch = curl_init(SUPABASE_URL . '/rest/v1/followers');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'apikey: ' . SUPABASE_ANON_KEY,
@@ -44,6 +46,12 @@ curl_close($ch);
 
 if ($response === false || $statusCode < 200 || $statusCode >= 300) {
     header('Location: index.php?status=error&message=' . urlencode('Nao foi possivel seguir este usuario.'));
+    exit;
+}
+
+$returnTo = isset($_POST['return_to']) ? trim((string) $_POST['return_to']) : '';
+if ($returnTo !== '' && strpos($returnTo, '/') === 0) {
+    header('Location: ' . $returnTo);
     exit;
 }
 

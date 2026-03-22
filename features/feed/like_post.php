@@ -44,5 +44,12 @@ if ($response === false || $statusCode < 200 || $statusCode >= 300) {
     exit;
 }
 
+$returnTo = isset($_POST['return_to']) ? trim((string) $_POST['return_to']) : '';
+if ($returnTo !== '' && strpos($returnTo, '/') === 0) {
+    $sep = strpos($returnTo, '?') !== false ? '&' : '?';
+    header('Location: ' . $returnTo . $sep . 'status=ok&message=' . urlencode('Post curtido.'));
+    exit;
+}
+
 header('Location: /features/feed/index.php?status=ok&message=' . urlencode('Post curtido.'));
 exit;

@@ -10,6 +10,11 @@ if ($userId === null || $userId === '' || $token === '') {
     exit;
 }
 
+if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+    header('Location: upload_story.php?status=error&message=' . urlencode('Configure SUPABASE_SERVICE_KEY em config/supabase.php.'));
+    exit;
+}
+
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
@@ -81,7 +86,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         CURLOPT_SSL_VERIFYHOST => false,
         CURLOPT_HTTPHEADER => [
             'apikey: ' . SUPABASE_ANON_KEY,
-            'Authorization: Bearer ' . $token,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
             'Content-Type: ' . $mime,
             'x-upsert: true',
         ],
@@ -93,6 +98,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($storageCode < 200 || $storageCode >= 300) {
         $err = $resBody !== false && $resBody !== '' ? substr($resBody, 0, 200) : ('HTTP ' . $storageCode);
         header('Location: upload_story.php?status=error&message=' . urlencode('Storage: ' . $err));
+        exit;
+    }
+
+    $publicUrl = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/stories/' . $filename;
+    $expiresAt = gmdate('Y-m-d\TH:i:s\Z', time() + 86400);
+
+    $insertPayload = json_encode([
+        'user_id' => $userId,
+        'image_url' => $publicUrl,
+        'expires_at' => $expiresAt,
+    ]);
+
+    $chIns = curl_init(SUPABASE_URL . '/rest/v1/stories');
+    curl_setopt_array($chIns, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $insertPayload,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal',
+        ],
+    ]);
+    $insBody = curl_exec($chIns);
+    $insCode = curl_getinfo($chIns, CURLINFO_HTTP_CODE);
+    curl_close($chIns);
+
+    if ($insCode < 200 || $insCode >= 300) {
+        $errIns = $insBody !== false && $insBody !== '' ? substr($insBody, 0, 300) : ('HTTP ' . $insCode);
+        header('Location: upload_story.php?status=error&message=' . urlencode('Imagem salva, mas falha ao registrar story: ' . $errIns));
         exit;
     }
 

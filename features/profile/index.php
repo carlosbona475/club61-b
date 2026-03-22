@@ -23,8 +23,18 @@ $is_admin = false;
 
 $access_token = isset($_SESSION['access_token']) ? $_SESSION['access_token'] : '';
 
-if ($access_token !== '' && $profile_user_id !== null && $profile_user_id !== '') {
-    $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $profile_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade');
+// Busca REST do perfil: select=display_id,username,avatar_url,tipo,cidade
+// No próprio perfil a URL deve ser: .../profiles?id=eq.{ $current_user_id }&select=...
+// Com ?user= (outro membro) usa-se o id desse perfil.
+$profile_lookup_id = ($profile_user_id !== null && $profile_user_id !== '') ? (string) $profile_user_id : '';
+$is_own_profile = $current_user_id !== null && (string) $profile_user_id === (string) $current_user_id;
+
+if ($access_token !== '' && $profile_lookup_id !== '') {
+    if ($is_own_profile) {
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+    } else {
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+    }
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -60,6 +70,40 @@ if (
     }
 }
 
+// Próprio perfil: reforçar dados (avatar, CL, tipo, cidade) via service_role se RLS ocultar campos no JWT
+if (
+    $current_user_id !== null
+    && (string) $profile_user_id === (string) $current_user_id
+    && supabase_service_role_available()
+) {
+    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+    $ch = curl_init($svcUrl);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+        'Accept: application/json',
+    ]));
+    curl_setopt($ch, CURLOPT_HTTPGET, true);
+    $svcBody = curl_exec($ch);
+    $svcHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($svcBody !== false && $svcHttp >= 200 && $svcHttp < 300) {
+        $svcRows = json_decode($svcBody, true);
+        if (is_array($svcRows) && !empty($svcRows[0])) {
+            $svc = $svcRows[0];
+            if (!is_array($profileRow)) {
+                $profileRow = [];
+            }
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade'] as $k) {
+                if (array_key_exists($k, $svc) && $svc[$k] !== null && trim((string) $svc[$k]) !== '') {
+                    $profileRow[$k] = $svc[$k];
+                }
+            }
+        }
+    }
+}
+
 if (is_array($profileRow)) {
     if (isset($profileRow['avatar_url'])) {
         $avatarUrl = trim((string) $profileRow['avatar_url']);
@@ -91,37 +135,36 @@ if (is_array($profileRow)) {
     }
 }
 
-// Próprio perfil: preencher tipo/cidade salvos no banco (leitura via service_role se necessário)
+$myPosts = array();
 if (
-    $current_user_id !== null
+    $access_token !== ''
+    && $current_user_id !== null
     && (string) $profile_user_id === (string) $current_user_id
-    && supabase_service_role_available()
 ) {
-    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $current_user_id) . '&select=' . rawurlencode('tipo,cidade');
-    $ch = curl_init($svcUrl);
+    $postsUrl = SUPABASE_URL . '/rest/v1/posts?user_id=eq.' . $current_user_id . '&select=id,image_url,caption&order=created_at.desc';
+    $ch = curl_init($postsUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
-        'Accept: application/json',
-    ]));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+        'apikey: ' . SUPABASE_ANON_KEY,
+        'Authorization: Bearer ' . $access_token,
+    ));
     curl_setopt($ch, CURLOPT_HTTPGET, true);
-    $svcBody = curl_exec($ch);
-    $svcHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $postsBody = curl_exec($ch);
+    $postsHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
-    if ($svcBody !== false && $svcHttp >= 200 && $svcHttp < 300) {
-        $svcRows = json_decode($svcBody, true);
-        if (is_array($svcRows) && !empty($svcRows[0])) {
-            $svc = $svcRows[0];
-            if (array_key_exists('tipo', $svc) && $svc['tipo'] !== null) {
-                $profileTipo = trim((string) $svc['tipo']);
-            }
-            if (array_key_exists('cidade', $svc) && $svc['cidade'] !== null) {
-                $profileCidade = trim((string) $svc['cidade']);
-            }
+    if ($postsBody !== false && $postsHttp >= 200 && $postsHttp < 300) {
+        $decodedPosts = json_decode($postsBody, true);
+        if (is_array($decodedPosts)) {
+            $myPosts = $decodedPosts;
         }
     }
 }
+
+$myPostsForGrid = array_values(array_filter($myPosts, function ($p) {
+    return isset($p['image_url']) && trim((string) $p['image_url']) !== '';
+}));
 
 if ($access_token !== '' && $current_user_id !== null && $current_user_id !== '') {
     $role_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $current_user_id) . '&select=' . rawurlencode('role');
@@ -491,6 +534,103 @@ $cidade = $profileCidade;
             border-radius: 4px;
         }
         .perfil-boasvindas strong { color: #e9e0ff; }
+        .posts-section {
+            margin-top: 28px;
+            padding-top: 24px;
+            border-top: 1px solid #222222;
+            text-align: left;
+        }
+        .posts-section .section-head {
+            margin-bottom: 16px;
+            font-size: 1rem;
+        }
+        .posts-empty {
+            font-size: 0.8125rem;
+            color: #666;
+            text-align: center;
+            padding: 20px 12px;
+            border: 1px dashed #333333;
+            border-radius: 4px;
+            background: #151515;
+        }
+        .posts-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2px;
+            width: 100%;
+        }
+        .posts-grid-cell {
+            position: relative;
+            aspect-ratio: 1 / 1;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+            border: none;
+            cursor: pointer;
+            overflow: hidden;
+            background: #1a1a1a;
+            display: block;
+        }
+        .posts-grid-cell img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            vertical-align: middle;
+        }
+        .posts-grid-cell:focus {
+            outline: 2px solid #7B2EFF;
+            outline-offset: 2px;
+        }
+        .post-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            background: rgba(0, 0, 0, 0.94);
+            align-items: center;
+            justify-content: center;
+            padding: 48px 16px 32px;
+        }
+        .post-modal.is-open { display: flex; }
+        .post-modal #postModalImg {
+            max-width: min(100vw - 32px, 900px);
+            max-height: calc(100vh - 120px);
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+        .post-modal-inner {
+            position: relative;
+            max-width: min(100vw - 32px, 900px);
+            max-height: calc(100vh - 96px);
+        }
+        .post-modal-inner img {
+            max-width: 100%;
+            max-height: calc(100vh - 120px);
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto;
+        }
+        .post-modal-close {
+            position: fixed;
+            top: 16px;
+            right: 16px;
+            width: 44px;
+            height: 44px;
+            border: none;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            color: #fff;
+            font-size: 1.5rem;
+            line-height: 1;
+            cursor: pointer;
+            z-index: 310;
+        }
+        .post-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
     </style>
 </head>
 <body>
@@ -558,6 +698,25 @@ $cidade = $profileCidade;
                     <input id="perfil-cidade" type="text" name="cidade" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Sua cidade" maxlength="120">
                     <button class="btn-salvar-perfil" type="submit">Salvar perfil</button>
                 </form>
+
+                <div class="posts-section">
+                    <h2 class="section-head">Minhas publicações</h2>
+                    <?php if (empty($myPostsForGrid)): ?>
+                        <p class="posts-empty">Nenhuma publicação ainda.</p>
+                    <?php else: ?>
+                        <div class="posts-grid">
+                            <?php foreach ($myPostsForGrid as $gp): ?>
+                                <?php
+                                $gimg = trim((string) $gp['image_url']);
+                                ?>
+                            <button type="button" class="posts-grid-cell" data-src="<?php echo htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8'); ?>" aria-label="Ampliar publicação">
+                                <img src="<?php echo htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                            </button>
+                            <?php endforeach; ?>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
                 <?php endif; ?>
 
                 <?php if ((string) $profile_user_id !== (string) $current_user_id): ?>
@@ -597,5 +756,43 @@ $cidade = $profileCidade;
             <?php endif; ?>
         </div>
     </div>
+
+    <div id="postModal" class="post-modal" role="dialog" aria-modal="true" aria-label="Publicação ampliada" hidden>
+        <button type="button" class="post-modal-close" aria-label="Fechar">&times;</button>
+        <img id="postModalImg" src="" alt="">
+    </div>
+    <script>
+    (function () {
+        var modal = document.getElementById('postModal');
+        var modalImg = document.getElementById('postModalImg');
+        if (!modal || !modalImg) return;
+        function openModal(src) {
+            modalImg.src = src;
+            modal.removeAttribute('hidden');
+            modal.classList.add('is-open');
+            document.body.style.overflow = 'hidden';
+        }
+        function closeModal() {
+            modal.classList.remove('is-open');
+            modal.setAttribute('hidden', '');
+            modalImg.removeAttribute('src');
+            document.body.style.overflow = '';
+        }
+        document.querySelectorAll('.posts-grid-cell').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var src = btn.getAttribute('data-src');
+                if (src) openModal(src);
+            });
+        });
+        var closeBtn = modal.querySelector('.post-modal-close');
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeModal();
+        });
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+        });
+    })();
+    </script>
 </body>
 </html>

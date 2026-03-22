@@ -1,8 +1,13 @@
 <?php
 
-session_start();
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
+require_once __DIR__ . '/../../config/profile_helper.php';
+
+if (!isCurrentUserAdmin()) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Acesso negado'));
+    exit;
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
@@ -24,6 +29,8 @@ $data = [
 
 $ch = curl_init(SUPABASE_URL . '/rest/v1/invites');
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 curl_setopt($ch, CURLOPT_POST, true);
 curl_setopt($ch, CURLOPT_HTTPHEADER, [
     'apikey: ' . SUPABASE_ANON_KEY,

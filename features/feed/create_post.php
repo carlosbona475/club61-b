@@ -55,7 +55,7 @@ curl_setopt_array($storageCh, [
     CURLOPT_POSTFIELDS => $binary,
     CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $token,
+        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
         'Content-Type: ' . $mimeType,
     ],
 ]);

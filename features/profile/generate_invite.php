@@ -3,6 +3,7 @@
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
 require_once __DIR__ . '/../../config/profile_helper.php';
+require_once __DIR__ . '/../../config/csrf.php';
 
 if (!isCurrentUserAdmin()) {
     header('Location: /features/profile/index.php?status=error&message=' . urlencode('Acesso negado'));
@@ -11,6 +12,11 @@ if (!isCurrentUserAdmin()) {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: index.php');
+    exit;
+}
+
+if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+    header('Location: index.php?status=error&message=' . urlencode('Sessão expirada. Atualize a página.'));
     exit;
 }
 

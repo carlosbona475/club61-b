@@ -1,10 +1,12 @@
 <?php
-session_start();
 
-if (isset($_SESSION['access_token'])) {
-    header("Location: /features/feed/index.php");
-    exit;
-} else {
-    header("Location: /features/auth/login.php");
-    exit;
-}
+declare(strict_types=1);
+
+/**
+ * Raiz do projeto (DirectoryIndex). Redirecionamento leve — não exige Composer.
+ * MVC completo entra em /features/feed/index.php via bootstrap/web.php.
+ */
+require_once __DIR__ . '/config/security_headers.php';
+club61_security_headers();
+header('Location: /features/feed/index.php');
+exit;

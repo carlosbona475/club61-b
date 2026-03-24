@@ -67,7 +67,7 @@ $profBody = curl_exec($ch);
 curl_close($ch);
 
 $avatarUrl = '';
-$displayLabel = 'CL00';
+$displayLabel = '';
 $profRows = json_decode($profBody !== false ? $profBody : '[]', true);
 if (is_array($profRows) && !empty($profRows[0])) {
     $pr = $profRows[0];
@@ -88,6 +88,12 @@ if (is_array($profRows) && !empty($profRows[0])) {
         if ($num !== null && $num > 0) {
             $displayLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
         }
+    }
+    if ($displayLabel === '' && !empty($pr['username'])) {
+        $displayLabel = '@' . trim((string) $pr['username']);
+    }
+    if ($displayLabel === '') {
+        $displayLabel = 'Membro';
     }
 }
 

@@ -1,24 +1,52 @@
 <?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-
+require_once __DIR__ . '/../../config/security_headers.php';
+require_once __DIR__ . '/../../config/session.php';
+require_once __DIR__ . '/../../config/rate_limit.php';
+require_once __DIR__ . '/../../config/validation.php';
 require_once __DIR__ . '/../../services/auth_service.php';
 require_once __DIR__ . '/../../config/supabase.php';
+require_once __DIR__ . '/../../config/csrf.php';
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
+club61_security_headers();
+club61_session_start_safe();
 
-$errorMessage = "";
+$errorMessage = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $invite_code = trim($_POST['invite_code'] ?? '');
-    $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+    $rl = club61_rate_limit_consume('register_post', 8, 3600);
+    if (!$rl['allowed']) {
+        $errorMessage = 'Muitas tentativas de cadastro a partir deste IP. Tente mais tarde.';
+    }
+}
 
-    if ($invite_code === '' || $email === '' || $password === '') {
-        $errorMessage = 'Informe codigo de convite, email e senha.';
-    } else {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
+    if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+        $errorMessage = 'Sessão expirada. Recarregue a página.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
+    $v = club61_validate($_POST, [
+        'invite_code' => 'required|alnum_invite',
+        'email' => 'required|email|max:320',
+        'password' => 'required|min:8',
+    ]);
+    if (!$v['ok']) {
+        $errorMessage = $v['errors'][0] ?? 'Dados inválidos.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
+    $invite_code = $v['data']['invite_code'];
+    $email = $v['data']['email'];
+    $password = $_POST['password'] ?? '';
+    $password = is_string($password) ? $password : '';
+    if (strlen($password) > 128) {
+        $errorMessage = 'Senha muito longa.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
         $url = SUPABASE_URL . '/rest/v1/invites?code=eq.' . urlencode($invite_code) . '&status=eq.available';
 
         $ch = curl_init($url);
@@ -39,21 +67,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
 
         if (empty($invite)) {
-            $errorMessage = "Convite inválido ou já utilizado";
+            $errorMessage = 'Convite inválido ou já utilizado';
         }
-    }
+}
 
-    if (empty($errorMessage)) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
         // Signup no Supabase
         $result = registerUser($email, $password);
 
         if ($result['success']) {
+            $chUpd = curl_init(SUPABASE_URL . '/rest/v1/invites?code=eq.' . urlencode($invite_code));
+            curl_setopt_array($chUpd, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST  => 'PATCH',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_POSTFIELDS     => json_encode(['status' => 'used']),
+                CURLOPT_HTTPHEADER     => [
+                    'apikey: '         . SUPABASE_SERVICE_KEY,
+                    'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+                    'Content-Type: application/json',
+                    'Prefer: return=minimal',
+                ],
+            ]);
+            curl_exec($chUpd);
+            curl_close($chUpd);
+
             header('Location: /features/auth/login.php');
             exit;
         }
 
         $errorMessage = $result['error'] ?? 'Nao foi possivel criar a conta.';
-    }
 }
 ?>
 <!DOCTYPE html>
@@ -190,7 +234,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="auth-error"><?= htmlspecialchars($errorMessage, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
 
-            <form class="auth-form" action="" method="POST">
+            <form class="auth-form" action="" method="POST" autocomplete="on">
+                <?= csrf_field() ?>
                 <div class="field">
                     <label for="invite_code">Código de convite</label>
                     <input type="text" id="invite_code" name="invite_code" placeholder="Cole seu código" autocomplete="off" required />

@@ -2,13 +2,19 @@
 
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
+require_once __DIR__ . '/../../config/profile_helper.php';
 
 $access_token = $_SESSION['access_token'] ?? '';
 $current_user_id = $_SESSION['user_id'] ?? null;
 
-$view_user_id = isset($_GET['user_id']) && trim((string) $_GET['user_id']) !== ''
-    ? trim((string) $_GET['user_id'])
-    : (string) ($current_user_id ?? '');
+$view_user_id = '';
+if (isset($_GET['id']) && trim((string) $_GET['id']) !== '') {
+    $view_user_id = trim((string) $_GET['id']);
+} elseif (isset($_GET['user_id']) && trim((string) $_GET['user_id']) !== '') {
+    $view_user_id = trim((string) $_GET['user_id']);
+} else {
+    $view_user_id = (string) ($current_user_id ?? '');
+}
 
 if ($view_user_id === '') {
     header('Location: /features/profile/index.php');
@@ -79,10 +85,16 @@ if ($access_token !== '') {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $access_token,
-    ]);
+    if (supabase_service_role_available()) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+            'Accept: application/json',
+        ]));
+    } else {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_ANON_KEY,
+            'Authorization: Bearer ' . $access_token,
+        ]);
+    }
     $postsBody = curl_exec($ch);
     $postsHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -112,10 +124,16 @@ if ($access_token !== '' && $postIds !== []) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, [
-        'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $access_token,
-    ]);
+    if (supabase_service_role_available()) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+            'Accept: application/json',
+        ]));
+    } else {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, [
+            'apikey: ' . SUPABASE_ANON_KEY,
+            'Authorization: Bearer ' . $access_token,
+        ]);
+    }
     $likesBody = curl_exec($ch);
     $likesHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -141,7 +159,7 @@ if ($access_token !== '' && $postIds !== []) {
 
 $postsCount = count($postsWithImage);
 $is_own = $current_user_id !== null && (string) $view_user_id === (string) $current_user_id;
-$returnUrl = '/features/profile/view.php?user_id=' . rawurlencode($view_user_id);
+$returnUrl = '/features/profile/view.php?id=' . rawurlencode($view_user_id);
 
 $flash_status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
@@ -285,8 +303,14 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             font-size: 0.9rem;
             font-weight: 600;
             cursor: pointer;
+            text-decoration: none;
         }
         .btn-msg:hover { background: #2a2a2a; color: #fff; }
+        .btn-msg-private {
+            display: inline-flex;
+            align-items: center;
+            margin-top: 12px;
+        }
         .section-title {
             font-size: 0.72rem;
             font-weight: 700;
@@ -485,8 +509,11 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
                         <input type="hidden" name="return_to" value="<?= htmlspecialchars($returnUrl, ENT_QUOTES, 'UTF-8') ?>">
                         <button type="submit" class="btn-follow">Seguir</button>
                     </form>
-                    <button type="button" class="btn-msg" title="Em breve">Mensagem</button>
                 </div>
+                <a class="btn-msg btn-msg-private"
+                   href="/features/chat/dm.php?with=<?= urlencode($view_user_id) ?>">
+                  💬 Mensagem privada
+                </a>
                 <?php endif; ?>
             </div>
         </div>

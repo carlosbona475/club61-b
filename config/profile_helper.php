@@ -1,6 +1,8 @@
 <?php
 
 require_once __DIR__ . '/supabase.php';
+require_once __DIR__ . '/session.php';
+require_once __DIR__ . '/admin_guard.php';
 
 /**
  * Service role configurada (servidor apenas).
@@ -182,9 +184,7 @@ function buildDisplayIdForNewProfile(int $rowCountBeforeInsert): string
  */
 function ensureUserProfile($user_id, $email)
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    club61_session_start_safe();
 
     $token = $_SESSION['access_token'] ?? '';
     if ($token === '' || $user_id === null || $user_id === '') {
@@ -254,9 +254,7 @@ function ensureUserProfile($user_id, $email)
  */
 function fetchProfileById($userId, $select)
 {
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
+    club61_session_start_safe();
 
     $token = $_SESSION['access_token'] ?? '';
     if ($token === '' || $userId === null || $userId === '') {
@@ -289,21 +287,4 @@ function fetchProfileById($userId, $select)
     return $rows[0];
 }
 
-/**
- * Verifica se o usuario logado tem role admin em profiles.
- */
-function isCurrentUserAdmin()
-{
-    if (session_status() !== PHP_SESSION_ACTIVE) {
-        session_start();
-    }
-
-    $uid = $_SESSION['user_id'] ?? null;
-    if ($uid === null || $uid === '') {
-        return false;
-    }
-
-    $row = fetchProfileById($uid, 'role');
-
-    return $row !== null && (($row['role'] ?? '') === 'admin');
-}
+/* isCurrentUserAdmin() definido em admin_guard.php */

@@ -1,59 +1,71 @@
 <?php
+/**
+ * Form legado — redireciona; o fluxo principal é follow_toggle.php (AJAX).
+ * Mantém POST followed_id para compatibilidade (usa coluna following_id na API).
+ */
 
-session_start();
+declare(strict_types=1);
+
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
+require_once __DIR__ . '/../../config/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    header('Location: index.php');
+    header('Location: /features/profile/index.php');
+
     exit;
 }
 
-$follower_id = $_SESSION['user_id'] ?? null;
-$followed_id = $_POST['followed_id'] ?? null;
+if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Sessão expirada. Atualize a página.'));
 
-if ($follower_id === null || $followed_id === null || trim((string) $followed_id) === '') {
-    header('Location: index.php?status=error&message=' . urlencode('Dados invalidos para seguir.'));
     exit;
 }
 
-if ((string) $follower_id === (string) $followed_id) {
-    header('Location: index.php?status=error&message=' . urlencode('Voce nao pode seguir a si mesmo.'));
+$follower_id = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
+$followed_id = isset($_POST['followed_id']) ? trim((string) $_POST['followed_id']) : '';
+
+if ($follower_id === '' || $followed_id === '' || $follower_id === $followed_id) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Dados inválidos.'));
+
     exit;
 }
 
-$data = [
+if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Serviço indisponível.'));
+
+    exit;
+}
+
+$body = json_encode([
     'follower_id' => $follower_id,
-    'followed_id' => $followed_id,
-];
+    'following_id' => $followed_id,
+], JSON_UNESCAPED_UNICODE);
 
 $ch = curl_init(SUPABASE_URL . '/rest/v1/followers');
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-curl_setopt($ch, CURLOPT_POST, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    'apikey: ' . SUPABASE_ANON_KEY,
-    'Authorization: Bearer ' . $_SESSION['access_token'],
-    'Content-Type: application/json',
-    'Prefer: return=minimal',
+curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => $body,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => false,
+    CURLOPT_HTTPHEADER => [
+        'apikey: ' . SUPABASE_SERVICE_KEY,
+        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+        'Content-Type: application/json',
+        'Prefer: return=minimal',
+    ],
 ]);
-curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
-
-$response = curl_exec($ch);
-$statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+curl_exec($ch);
+$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-if ($response === false || $statusCode < 200 || $statusCode >= 300) {
-    header('Location: index.php?status=error&message=' . urlencode('Nao foi possivel seguir este usuario.'));
+if ($code < 200 || $code >= 300) {
+    header('Location: /features/profile/index.php?user=' . urlencode($followed_id) . '&status=error&message=' . urlencode('Não foi possível seguir.'));
+
     exit;
 }
 
-$returnTo = isset($_POST['return_to']) ? trim((string) $_POST['return_to']) : '';
-if ($returnTo !== '' && strpos($returnTo, '/') === 0) {
-    header('Location: ' . $returnTo);
-    exit;
-}
+header('Location: /features/profile/index.php?user=' . urlencode($followed_id) . '&status=ok&message=' . urlencode('A seguir.'));
 
-header('Location: index.php?user=' . urlencode((string) $followed_id));
 exit;

@@ -1,31 +1,78 @@
 <?php
+require_once __DIR__ . '/../../config/security_headers.php';
+require_once __DIR__ . '/../../config/session.php';
+require_once __DIR__ . '/../../config/rate_limit.php';
+require_once __DIR__ . '/../../config/validation.php';
 require_once __DIR__ . '/../../services/auth_service.php';
+require_once __DIR__ . '/../../config/csrf.php';
+require_once __DIR__ . '/../../config/admin_guard.php';
+require_once __DIR__ . '/../../config/profile_helper.php';
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
+club61_security_headers();
+club61_session_start_safe();
 
 $error = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $email = trim($_POST['email'] ?? '');
-    $password = trim($_POST['password'] ?? '');
+$lock = club61_login_rate_is_locked();
+if ($lock['locked']) {
+    $m = max(1, (int) ceil($lock['retry_after'] / 60));
+    $error = 'Muitas tentativas falhadas. Tente novamente em cerca de ' . $m . ' minuto(s).';
+}
 
-    if ($email === '' || $password === '') {
-        $error = 'Informe email e senha.';
-    } elseif (!function_exists('curl_init')) {
-        $error = 'ERRO: cURL não está disponível neste servidor!';
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
+    $rl = club61_rate_limit_consume('login_post', 20, 600);
+    if (!$rl['allowed']) {
+        $error = 'Muitas tentativas. Aguarde alguns minutos antes de tentar de novo.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
+    if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+        $error = 'Sessão expirada. Atualize a página e tente novamente.';
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
+    $v = club61_validate($_POST, [
+        'email' => 'required|email|max:320',
+        'password' => 'required',
+    ]);
+    if (!$v['ok']) {
+        $error = $v['errors'][0] ?? 'Dados inválidos.';
     } else {
-        $login = loginUser($email, $password);
-        if ($login['success']) {
-            $_SESSION['access_token'] = $login['access_token'];
-            $_SESSION['user_id'] = $login['user_id'];
-            require_once __DIR__ . '/../../config/profile_helper.php';
-            ensureUserProfile($_SESSION['user_id'], $email);
-            header("Location: /features/feed/index.php");
-            exit;
+        $email = $v['data']['email'];
+        $password = $_POST['password'] ?? '';
+        $password = is_string($password) ? $password : '';
+        if (strlen($password) > 128) {
+            $error = 'Dados inválidos.';
         }
-        $error = 'RESPOSTA SUPABASE (debug completo): ' . json_encode($login, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
+
+        if ($error === '' && !function_exists('curl_init')) {
+            $error = 'ERRO: cURL não está disponível neste servidor!';
+        } elseif ($error === '') {
+            $login = loginUser($email, $password);
+            if ($login['success']) {
+                session_regenerate_id(true);
+                csrf_rotate();
+                $_SESSION['access_token'] = $login['access_token'];
+                $_SESSION['user_id'] = $login['user_id'];
+                ensureUserProfile($_SESSION['user_id'], $email);
+                admin_invalidate_profile_cache();
+                club61_login_rate_reset();
+                if (isCurrentUserAdmin()) {
+                    header('Location: /features/admin/index.php');
+                } else {
+                    header('Location: /features/feed/index.php');
+                }
+                exit;
+            }
+            $fail = club61_login_rate_record_failure(8, 900);
+            if ($fail['blocked'] || club61_login_rate_is_locked()['locked']) {
+                $error = 'Muitas tentativas falhadas. Aguarde 15 minutos ou atualize após o tempo indicado.';
+            } else {
+                $error = 'Credenciais inválidas ou sessão indisponível.';
+            }
+        }
     }
 }
 ?>
@@ -167,14 +214,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="auth-error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
             <?php endif; ?>
 
-            <form class="auth-form" method="POST">
+            <form class="auth-form" method="POST" autocomplete="on">
+                <?= csrf_field() ?>
                 <div class="field">
                     <label for="email">E-mail</label>
-                    <input type="email" id="email" name="email" placeholder="seu@email.com" autocomplete="email">
+                    <input type="email" id="email" name="email" placeholder="seu@email.com" autocomplete="email" maxlength="320" required>
                 </div>
                 <div class="field">
                     <label for="password">Senha</label>
-                    <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password">
+                    <input type="password" id="password" name="password" placeholder="••••••••" autocomplete="current-password" maxlength="128" required>
                 </div>
                 <button class="btn" type="submit">Entrar</button>
             </form>

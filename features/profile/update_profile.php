@@ -2,6 +2,7 @@
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
 require_once __DIR__ . '/../../config/profile_helper.php';
+require_once __DIR__ . '/../../config/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /features/profile/index.php');
@@ -11,8 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 $userId = $_SESSION['user_id'] ?? null;
 $token = $_SESSION['access_token'] ?? '';
 
-if ($userId === null || $userId === '' || $token === '') {
-    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Sessão inválida. Faça login novamente.'));
+if ($userId === null || $userId === '' || $token === '' || !csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Sessão inválida ou token CSRF.'));
     exit;
 }
 
@@ -24,8 +25,13 @@ if (!supabase_service_role_available()) {
 $userId = (string) $userId;
 
 $allowedTipo = ['Homem', 'Mulher', 'Casal'];
+$allowedRel = ['solteiro', 'solteira', 'casal', 'casado', 'casada'];
 $tipo = isset($_POST['tipo']) ? trim((string) $_POST['tipo']) : '';
 $cidade = isset($_POST['cidade']) ? trim((string) $_POST['cidade']) : '';
+$bio = isset($_POST['bio']) ? trim((string) $_POST['bio']) : '';
+$ageStr = isset($_POST['age']) ? trim((string) $_POST['age']) : '';
+$relationshipType = isset($_POST['relationship_type']) ? strtolower(trim((string) $_POST['relationship_type'])) : '';
+$partnerAgeStr = isset($_POST['partner_age']) ? trim((string) $_POST['partner_age']) : '';
 
 if ($tipo === '' || !in_array($tipo, $allowedTipo, true)) {
     header('Location: /features/profile/index.php?status=error&message=' . urlencode('Selecione um tipo válido (Homem, Mulher ou Casal).'));
@@ -36,6 +42,43 @@ $cidadeLen = function_exists('mb_strlen') ? mb_strlen($cidade, 'UTF-8') : strlen
 if ($cidadeLen > 120) {
     header('Location: /features/profile/index.php?status=error&message=' . urlencode('Cidade muito longa (máximo 120 caracteres).'));
     exit;
+}
+
+$bioLen = function_exists('mb_strlen') ? mb_strlen($bio, 'UTF-8') : strlen($bio);
+if ($bioLen > 2000) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Bio muito longa.'));
+    exit;
+}
+
+if ($relationshipType === '' || !in_array($relationshipType, $allowedRel, true)) {
+    header('Location: /features/profile/index.php?status=error&message=' . urlencode('Selecione o tipo de relacionamento.'));
+    exit;
+}
+
+$age = null;
+if ($ageStr !== '') {
+    if (!ctype_digit($ageStr)) {
+        header('Location: /features/profile/index.php?status=error&message=' . urlencode('Idade inválida.'));
+        exit;
+    }
+    $age = (int) $ageStr;
+    if ($age < 18 || $age > 120) {
+        header('Location: /features/profile/index.php?status=error&message=' . urlencode('Idade deve estar entre 18 e 120.'));
+        exit;
+    }
+}
+
+$partnerAge = null;
+if ($relationshipType === 'casal') {
+    if ($partnerAgeStr === '' || !ctype_digit($partnerAgeStr)) {
+        header('Location: /features/profile/index.php?status=error&message=' . urlencode('Informe a idade do(a) parceiro(a).'));
+        exit;
+    }
+    $partnerAge = (int) $partnerAgeStr;
+    if ($partnerAge < 18 || $partnerAge > 120) {
+        header('Location: /features/profile/index.php?status=error&message=' . urlencode('Idade do parceiro(a) inválida.'));
+        exit;
+    }
 }
 
 /**
@@ -83,7 +126,7 @@ $headersWriteService = [
 ];
 
 // 1) GET — verificar se o registro existe
-$getUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,tipo,cidade,display_id';
+$getUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,tipo,cidade,display_id,bio,age,relationship_type,partner_age';
 $ch = curl_init($getUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -112,7 +155,10 @@ if (!empty($existingRows)) {
     $payload = [
         'tipo' => $tipo,
         'cidade' => $cidade,
-        'display_id' => $display_id,
+        'bio' => $bio,
+        'age' => $age,
+        'relationship_type' => $relationshipType,
+        'partner_age' => $relationshipType === 'casal' ? $partnerAge : null,
     ];
     $ch = curl_init($patchUrl);
     curl_setopt_array($ch, [
@@ -147,6 +193,10 @@ if (!empty($existingRows)) {
         'display_id' => $display_id,
         'tipo' => $tipo,
         'cidade' => $cidade,
+        'bio' => $bio,
+        'age' => $age,
+        'relationship_type' => $relationshipType,
+        'partner_age' => $relationshipType === 'casal' ? $partnerAge : null,
     ];
 
     $ch = curl_init(SUPABASE_URL . '/rest/v1/profiles');
@@ -168,7 +218,7 @@ if (!empty($existingRows)) {
 }
 
 // 2) GET — confirmar persistência
-$verifyUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=tipo,cidade';
+$verifyUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=tipo,cidade,bio,age,relationship_type,partner_age';
 $ch = curl_init($verifyUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -191,12 +241,17 @@ if (!is_array($verifyRows) || $verifyRows === []) {
 $v = $verifyRows[0];
 $vTipo = isset($v['tipo']) ? trim((string) $v['tipo']) : '';
 $vCidade = isset($v['cidade']) ? trim((string) $v['cidade']) : '';
+$vBio = isset($v['bio']) && $v['bio'] !== null ? trim((string) $v['bio']) : '';
+$vRel = isset($v['relationship_type']) && $v['relationship_type'] !== null ? strtolower(trim((string) $v['relationship_type'])) : '';
 
-if ($vTipo !== $tipo || $vCidade !== $cidade) {
+if ($vTipo !== $tipo || $vCidade !== $cidade || $vRel !== $relationshipType) {
     club61_redirect_profile_error(
         'Validação',
-        'tipo/cidade divergentes. DB: ' . json_encode(['tipo' => $vTipo, 'cidade' => $vCidade], JSON_UNESCAPED_UNICODE)
+        'tipo/cidade/relacionamento divergentes após salvar.'
     );
+}
+if ($vBio !== $bio) {
+    club61_redirect_profile_error('Validação', 'Bio não persistida como esperado.');
 }
 
 header('Location: /features/profile/index.php?status=ok&message=' . urlencode('Perfil atualizado com sucesso!'));

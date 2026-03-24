@@ -1,8 +1,12 @@
 <?php
 
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
+declare(strict_types=1);
+
+require_once __DIR__ . '/../../config/security_headers.php';
+require_once __DIR__ . '/../../config/session.php';
+
+club61_security_headers();
+club61_session_start_safe();
 
 $_SESSION = [];
 

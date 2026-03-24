@@ -1,0 +1,645 @@
+<?php
+/**
+ * Feed: post_likes, post_comments — chamadas REST com service role (servidor).
+ *
+ * Requer: config/supabase.php com SUPABASE_SERVICE_KEY
+ */
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/supabase.php';
+require_once __DIR__ . '/session.php';
+
+function feed_sk_available(): bool
+{
+    return defined('SUPABASE_URL') && defined('SUPABASE_SERVICE_KEY') && SUPABASE_SERVICE_KEY !== '';
+}
+
+/** @var bool|null */
+$GLOBALS['_club61_post_likes_probe'] = null;
+
+function feed_post_likes_table_ready(): bool
+{
+    if ($GLOBALS['_club61_post_likes_probe'] !== null) {
+        return (bool) $GLOBALS['_club61_post_likes_probe'];
+    }
+    $GLOBALS['_club61_post_likes_probe'] = false;
+    if (!feed_sk_available()) {
+        return false;
+    }
+    $url = SUPABASE_URL . '/rest/v1/post_likes?select=id&limit=1';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $GLOBALS['_club61_post_likes_probe'] = ($code >= 200 && $code < 300);
+
+    return (bool) $GLOBALS['_club61_post_likes_probe'];
+}
+
+/** @var bool|null */
+$GLOBALS['_club61_post_comments_probe'] = null;
+
+function feed_post_comments_table_ready(): bool
+{
+    if ($GLOBALS['_club61_post_comments_probe'] !== null) {
+        return (bool) $GLOBALS['_club61_post_comments_probe'];
+    }
+    $GLOBALS['_club61_post_comments_probe'] = false;
+    if (!feed_sk_available()) {
+        return false;
+    }
+    $url = SUPABASE_URL . '/rest/v1/post_comments?select=id&limit=1';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $GLOBALS['_club61_post_comments_probe'] = ($code >= 200 && $code < 300);
+
+    return (bool) $GLOBALS['_club61_post_comments_probe'];
+}
+
+/**
+ * Contagem exata via PostgREST (Prefer: count=exact + Range: 0-0).
+ */
+function feed_count_rows_exact(string $table, string $filterEq): ?int
+{
+    if (!feed_sk_available()) {
+        return null;
+    }
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?' . $filterEq . '&select=id';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HEADER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+            'Prefer: count=exact',
+            'Range: 0-0',
+        ],
+    ]);
+    $resp = curl_exec($ch);
+    $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
+    $hs = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($resp === false || $hs === 404) {
+        return null;
+    }
+    if ($hs < 200 || $hs >= 300) {
+        return null;
+    }
+    $headers = substr($resp, 0, $headerSize);
+    if (preg_match('/content-range:\s*[^/]*\/(\d+)/i', $headers, $m)) {
+        return (int) $m[1];
+    }
+
+    return 0;
+}
+
+/**
+ * Curtidas de um post (contagem exata Supabase / PostgREST).
+ */
+function getLikesCount(int $postId): int
+{
+    if ($postId <= 0 || !feed_sk_available()) {
+        return 0;
+    }
+    if (feed_post_likes_table_ready()) {
+        $n = feed_count_rows_exact('post_likes', 'post_id=eq.' . $postId);
+
+        return $n ?? 0;
+    }
+    $n = feed_count_rows_exact('likes', 'post_id=eq.' . $postId);
+
+    return $n ?? 0;
+}
+
+/**
+ * @return array{success:bool, status:?string, error:?string}
+ */
+function feed_toggle_post_likes_row(string $userId, int $postId): array
+{
+    $fail = ['success' => false, 'status' => null, 'error' => 'toggle_failed'];
+    if ($userId === '' || $postId <= 0 || !feed_sk_available()) {
+        $fail['error'] = 'config';
+
+        return $fail;
+    }
+    $checkUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId) . '&select=id';
+    $ch = curl_init($checkUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        $fail['error'] = 'post_likes_unavailable';
+
+        return $fail;
+    }
+    $existing = json_decode((string) $raw, true);
+    $liked = is_array($existing) && $existing !== [];
+
+    if ($liked) {
+        $delUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId);
+        $ch = curl_init($delUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => 'DELETE',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_SERVICE_KEY,
+                'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+                'Prefer: return=minimal',
+            ],
+        ]);
+        curl_exec($ch);
+        $delCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($delCode < 200 || $delCode >= 300) {
+            return $fail;
+        }
+
+        return ['success' => true, 'status' => 'unliked', 'error' => null];
+    }
+
+    $body = json_encode(['post_id' => $postId, 'user_id' => $userId], JSON_UNESCAPED_UNICODE);
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/post_likes');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Content-Type: application/json',
+            'Prefer: return=minimal',
+        ],
+    ]);
+    curl_exec($ch);
+    $insCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($insCode < 200 || $insCode >= 300) {
+        return $fail;
+    }
+
+    return ['success' => true, 'status' => 'liked', 'error' => null];
+}
+
+/**
+ * Toggle na tabela legado `likes` (JWT do utilizador).
+ *
+ * @return array{success:bool, status:?string, error:?string}
+ */
+function feed_toggle_legacy_likes_row(string $userId, string $accessToken, int $postId): array
+{
+    $fail = ['success' => false, 'status' => null, 'error' => 'toggle_failed'];
+    if ($userId === '' || $accessToken === '' || $postId <= 0) {
+        $fail['error'] = 'auth';
+
+        return $fail;
+    }
+    $hdr = [
+        'apikey: ' . SUPABASE_ANON_KEY,
+        'Authorization: Bearer ' . $accessToken,
+        'Accept: application/json',
+    ];
+    $checkUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $postId . '&select=id';
+    $ch = curl_init($checkUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => $hdr,
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        $fail['error'] = 'likes_unavailable';
+
+        return $fail;
+    }
+    $existing = json_decode((string) $raw, true);
+    $liked = is_array($existing) && $existing !== [];
+
+    if ($liked) {
+        $delUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $postId;
+        $ch = curl_init($delUrl);
+        curl_setopt_array($ch, [
+            CURLOPT_CUSTOMREQUEST => 'DELETE',
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER => $hdr,
+        ]);
+        curl_exec($ch);
+        $delCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($delCode < 200 || $delCode >= 300) {
+            return $fail;
+        }
+
+        return ['success' => true, 'status' => 'unliked', 'error' => null];
+    }
+
+    $body = json_encode(['user_id' => $userId, 'post_id' => $postId], JSON_UNESCAPED_UNICODE);
+    $ch = curl_init(SUPABASE_URL . '/rest/v1/likes');
+    curl_setopt_array($ch, [
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => array_merge($hdr, [
+            'Content-Type: application/json',
+            'Prefer: return=minimal',
+        ]),
+    ]);
+    curl_exec($ch);
+    $insCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($insCode < 200 || $insCode >= 300) {
+        return $fail;
+    }
+
+    return ['success' => true, 'status' => 'liked', 'error' => null];
+}
+
+function feed_render_comment_line_html(?string $commentId, string $displayLabel, string $commentText): string
+{
+    $idAttr = ($commentId !== null && $commentId !== '')
+        ? ' data-comment-id="' . htmlspecialchars($commentId, ENT_QUOTES, 'UTF-8') . '"'
+        : '';
+
+    return '<div class="comment-line"' . $idAttr . '><span class="comment-user">'
+        . htmlspecialchars($displayLabel, ENT_QUOTES, 'UTF-8') . '</span>'
+        . htmlspecialchars($commentText, ENT_QUOTES, 'UTF-8') . '</div>';
+}
+
+/**
+ * @return array<string, int> post_id string => count
+ */
+function feed_get_likes_count_map(array $postIds): array
+{
+    if ($postIds === [] || !feed_sk_available()) {
+        return [];
+    }
+    $ids = array_unique(array_map('intval', $postIds));
+    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    if ($ids === []) {
+        return [];
+    }
+    $in = implode(',', $ids);
+    $table = feed_post_likes_table_ready() ? 'post_likes' : 'likes';
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=post_id&post_id=in.(' . $in . ')';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return [];
+    }
+    $rows = json_decode($raw, true);
+    if (!is_array($rows)) {
+        return [];
+    }
+    $map = [];
+    foreach ($rows as $r) {
+        if (!isset($r['post_id'])) {
+            continue;
+        }
+        $pid = (string) (int) $r['post_id'];
+        $map[$pid] = ($map[$pid] ?? 0) + 1;
+    }
+
+    return $map;
+}
+
+/**
+ * @param list<int> $postIds
+ * @return array<int, true> liked post ids as int keys
+ */
+function feed_get_user_liked_post_ids(string $userId, array $postIds): array
+{
+    $out = [];
+    if ($userId === '' || $postIds === [] || !feed_sk_available()) {
+        return $out;
+    }
+    $ids = array_unique(array_map('intval', $postIds));
+    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    if ($ids === []) {
+        return $out;
+    }
+    $in = implode(',', $ids);
+    $table = feed_post_likes_table_ready() ? 'post_likes' : 'likes';
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=post_id&user_id=eq.' . urlencode($userId)
+        . '&post_id=in.(' . $in . ')';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return $out;
+    }
+    $rows = json_decode($raw, true);
+    if (!is_array($rows)) {
+        return $out;
+    }
+    foreach ($rows as $r) {
+        if (isset($r['post_id'])) {
+            $out[(int) $r['post_id']] = true;
+        }
+    }
+
+    return $out;
+}
+
+/**
+ * @return array<int, list<array<string,mixed>>> post_id => até $limit comentários (mais recentes primeiro)
+ */
+function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): array
+{
+    $result = [];
+    if ($postIds === [] || !feed_sk_available() || !feed_post_comments_table_ready()) {
+        return $result;
+    }
+    $ids = array_unique(array_map('intval', $postIds));
+    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    if ($ids === []) {
+        return $result;
+    }
+    foreach ($ids as $pid) {
+        $result[$pid] = [];
+    }
+    $in = implode(',', $ids);
+    $cap = max(1, min(200, count($ids) * max(1, $limitPerPost) * 2));
+    $url = SUPABASE_URL . '/rest/v1/post_comments?select=id,post_id,user_id,comment_text,created_at'
+        . '&post_id=in.(' . $in . ')'
+        . '&order=created_at.desc&limit=' . $cap;
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return $result;
+    }
+    $rows = json_decode($raw, true);
+    if (!is_array($rows)) {
+        return $result;
+    }
+    foreach ($rows as $r) {
+        if (!isset($r['post_id'])) {
+            continue;
+        }
+        $pid = (int) $r['post_id'];
+        if (!isset($result[$pid])) {
+            continue;
+        }
+        if (count($result[$pid]) >= $limitPerPost) {
+            continue;
+        }
+        $result[$pid][] = $r;
+    }
+
+    return $result;
+}
+
+/**
+ * @return array<string, array<string,mixed>> user_id => profile row
+ */
+function feed_fetch_profiles_by_ids(array $userIds): array
+{
+    $out = [];
+    if ($userIds === [] || !feed_sk_available()) {
+        return $out;
+    }
+    $ids = array_unique(array_filter(array_map('strval', $userIds)));
+    if ($ids === []) {
+        return $out;
+    }
+    $in = implode(',', $ids);
+    $url = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,username,avatar_url&id=in.(' . $in . ')';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    $rows = json_decode((string) $raw, true);
+    if (!is_array($rows)) {
+        return $out;
+    }
+    foreach ($rows as $row) {
+        if (isset($row['id'])) {
+            $out[(string) $row['id']] = $row;
+        }
+    }
+
+    return $out;
+}
+
+function feed_post_exists(int $postId): bool
+{
+    if ($postId <= 0) {
+        return false;
+    }
+    if (feed_sk_available()) {
+        $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id';
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER => [
+                'apikey: ' . SUPABASE_SERVICE_KEY,
+                'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+                'Accept: application/json',
+            ],
+        ]);
+        $raw = curl_exec($ch);
+        $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($raw !== false && $code >= 200 && $code < 300) {
+            $rows = json_decode($raw, true);
+            if (is_array($rows) && $rows !== []) {
+                return true;
+            }
+        }
+    }
+    if (session_status() !== PHP_SESSION_ACTIVE) {
+        session_start();
+    }
+    $tok = isset($_SESSION['access_token']) ? (string) $_SESSION['access_token'] : '';
+    if ($tok === '' || !defined('SUPABASE_ANON_KEY')) {
+        return false;
+    }
+    $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_ANON_KEY,
+            'Authorization: Bearer ' . $tok,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return false;
+    }
+    $rows = json_decode($raw, true);
+
+    return is_array($rows) && $rows !== [];
+}
+
+function feed_csrf_token(): string
+{
+    club61_session_start_safe();
+    if (empty($_SESSION['feed_csrf']) || !is_string($_SESSION['feed_csrf'])) {
+        $_SESSION['feed_csrf'] = bin2hex(random_bytes(32));
+    }
+
+    return $_SESSION['feed_csrf'];
+}
+
+function feed_csrf_validate(?string $token): bool
+{
+    club61_session_start_safe();
+    $s = $_SESSION['feed_csrf'] ?? '';
+
+    return is_string($token) && $s !== '' && hash_equals($s, $token);
+}
+
+/** @deprecated use getLikesCount() */
+function getPostLikesCount(int $postId): int
+{
+    return getLikesCount($postId);
+}
+
+function hasUserLiked(string $userId, int $postId): bool
+{
+    if ($userId === '') {
+        return false;
+    }
+    $m = feed_get_user_liked_post_ids($userId, [$postId]);
+
+    return isset($m[$postId]);
+}
+
+/**
+ * @return list<array<string,mixed>>
+ */
+function getRecentComments(int $postId, int $limit = 3): array
+{
+    $m = feed_get_recent_comments_map([$postId], $limit);
+
+    return $m[$postId] ?? [];
+}
+
+/**
+ * Comentários de um post (mais antigos primeiro), para página "ver todos".
+ *
+ * @return list<array<string,mixed>>
+ */
+function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
+{
+    if ($postId <= 0 || !feed_sk_available() || !feed_post_comments_table_ready()) {
+        return [];
+    }
+    $url = SUPABASE_URL . '/rest/v1/post_comments?select=id,post_id,user_id,comment_text,created_at'
+        . '&post_id=eq.' . $postId
+        . '&order=created_at.asc&limit=' . max(1, min(500, $limit));
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    $rows = json_decode((string) $raw, true);
+
+    return is_array($rows) ? $rows : [];
+}

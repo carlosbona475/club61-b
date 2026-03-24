@@ -4,6 +4,29 @@ require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
 require_once __DIR__ . '/../../config/profile_helper.php';
 
+/**
+ * Rótulo em PT para exibição (valor salvo em minúsculas).
+ */
+function club61_relationship_label(string $stored): string
+{
+    $k = strtolower(trim($stored));
+    $map = [
+        'solteiro' => 'Solteiro',
+        'solteira' => 'Solteira',
+        'casal' => 'Casal',
+        'casado' => 'Casado',
+        'casada' => 'Casada',
+        'single' => 'Solteiro(a)',
+        'couple' => 'Casal',
+    ];
+
+    return $map[$k] ?? $stored;
+}
+require_once __DIR__ . '/../../config/csrf.php';
+require_once __DIR__ . '/../../config/profile_stats.php';
+require_once __DIR__ . '/../../config/message_requests.php';
+require_once __DIR__ . '/../../config/followers.php';
+
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 $current_user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
@@ -19,6 +42,16 @@ $clLabel = 'CL00';
 $avatarUrl = '';
 $profileTipo = '';
 $profileCidade = '';
+$profileBio = '';
+$profileAge = null;
+$profileRelationship = '';
+$profilePartnerAge = null;
+$statPosts = 0;
+$statLikesRecv = 0;
+$statFollowersCount = 0;
+$isFollowingProfile = false;
+$mrBtn = 'hidden';
+$profileUsername = '';
 $is_admin = false;
 
 $access_token = isset($_SESSION['access_token']) ? $_SESSION['access_token'] : '';
@@ -31,9 +64,9 @@ $is_own_profile = $current_user_id !== null && (string) $profile_user_id === (st
 
 if ($access_token !== '' && $profile_lookup_id !== '') {
     if ($is_own_profile) {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
     } else {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
     }
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -76,7 +109,7 @@ if (
     && (string) $profile_user_id === (string) $current_user_id
     && supabase_service_role_available()
 ) {
-    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=display_id,username,avatar_url,tipo,cidade';
+    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
     $ch = curl_init($svcUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -95,7 +128,7 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade'] as $k) {
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age'] as $k) {
                 if (array_key_exists($k, $svc) && $svc[$k] !== null && trim((string) $svc[$k]) !== '') {
                     $profileRow[$k] = $svc[$k];
                 }
@@ -108,11 +141,26 @@ if (is_array($profileRow)) {
     if (isset($profileRow['avatar_url'])) {
         $avatarUrl = trim((string) $profileRow['avatar_url']);
     }
+    if (isset($profileRow['username'])) {
+        $profileUsername = trim((string) $profileRow['username']);
+    }
     if (isset($profileRow['tipo'])) {
         $profileTipo = trim((string) $profileRow['tipo']);
     }
     if (isset($profileRow['cidade'])) {
         $profileCidade = trim((string) $profileRow['cidade']);
+    }
+    if (isset($profileRow['bio']) && $profileRow['bio'] !== null) {
+        $profileBio = trim((string) $profileRow['bio']);
+    }
+    if (isset($profileRow['age']) && $profileRow['age'] !== null && $profileRow['age'] !== '') {
+        $profileAge = (int) $profileRow['age'];
+    }
+    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_type']);
+    }
+    if (isset($profileRow['partner_age']) && $profileRow['partner_age'] !== null && $profileRow['partner_age'] !== '') {
+        $profilePartnerAge = (int) $profileRow['partner_age'];
     }
     $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
     if ($disp !== '') {
@@ -135,21 +183,116 @@ if (is_array($profileRow)) {
     }
 }
 
+if (
+    !$is_own_profile
+    && $profile_lookup_id !== ''
+    && supabase_service_role_available()
+) {
+    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profile_lookup_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
+    $chO = curl_init($svcOtherUrl);
+    curl_setopt($chO, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($chO, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($chO, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($chO, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+        'Accept: application/json',
+    ]));
+    curl_setopt($chO, CURLOPT_HTTPGET, true);
+    $svcOB = curl_exec($chO);
+    $svcOC = curl_getinfo($chO, CURLINFO_HTTP_CODE);
+    curl_close($chO);
+    if ($svcOB !== false && $svcOC >= 200 && $svcOC < 300) {
+        $svcORows = json_decode($svcOB, true);
+        if (is_array($svcORows) && !empty($svcORows[0])) {
+            $o = $svcORows[0];
+            if (!is_array($profileRow)) {
+                $profileRow = [];
+            }
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age'] as $k) {
+                if (array_key_exists($k, $o) && $o[$k] !== null && trim((string) $o[$k]) !== '') {
+                    $profileRow[$k] = $o[$k];
+                }
+            }
+            if (isset($o['bio'])) {
+                $profileBio = trim((string) $o['bio']);
+            }
+            if (isset($o['username'])) {
+                $profileUsername = trim((string) $o['username']);
+            }
+            if (isset($o['age']) && $o['age'] !== null && $o['age'] !== '') {
+                $profileAge = (int) $o['age'];
+            }
+            if (isset($o['relationship_type'])) {
+                $profileRelationship = trim((string) $o['relationship_type']);
+            }
+            if (isset($o['partner_age']) && $o['partner_age'] !== null && $o['partner_age'] !== '') {
+                $profilePartnerAge = (int) $o['partner_age'];
+            }
+            if (isset($o['avatar_url']) && trim((string) $o['avatar_url']) !== '') {
+                $avatarUrl = trim((string) $o['avatar_url']);
+            }
+            $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
+            if ($disp !== '') {
+                $num = null;
+                if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
+                    $num = (int) $m[1];
+                } else {
+                    $digits = preg_replace('/\D/', '', $disp);
+                    if ($digits !== '') {
+                        $num = (int) $digits;
+                    }
+                }
+                if ($num !== null && $num > 0) {
+                    $clLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
+                } else {
+                    $clLabel = 'CL00';
+                }
+            }
+        }
+    }
+}
+
+if ($profile_lookup_id !== '' && profile_stats_service_ok()) {
+    $statPosts = profile_count_posts($profile_lookup_id);
+    $statLikesRecv = profile_count_likes_received($profile_lookup_id);
+}
+
+if ($profile_lookup_id !== '' && followers_service_ok()) {
+    $statFollowersCount = getFollowersCount($profile_lookup_id);
+}
+
+if (
+    !$is_own_profile
+    && $current_user_id !== null
+    && $profile_lookup_id !== ''
+    && followers_service_ok()
+) {
+    $isFollowingProfile = followers_is_following((string) $current_user_id, (string) $profile_lookup_id);
+}
+
+if ($current_user_id !== null && $profile_lookup_id !== '') {
+    $mrBtn = mr_profile_button_state((string) $current_user_id, (string) $profile_lookup_id);
+}
+
 $myPosts = array();
 if (
     $access_token !== ''
-    && $current_user_id !== null
-    && (string) $profile_user_id === (string) $current_user_id
+    && $profile_lookup_id !== ''
 ) {
-    $postsUrl = SUPABASE_URL . '/rest/v1/posts?user_id=eq.' . $current_user_id . '&select=id,image_url,caption&order=created_at.desc';
+    $postsUrl = SUPABASE_URL . '/rest/v1/posts?user_id=eq.' . urlencode((string) $profile_lookup_id) . '&select=' . rawurlencode('id,image_url,caption') . '&order=created_at.desc';
     $ch = curl_init($postsUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-        'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $access_token,
-    ));
+    if (supabase_service_role_available()) {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), array(
+            'Accept: application/json',
+        )));
+    } else {
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array(
+            'apikey: ' . SUPABASE_ANON_KEY,
+            'Authorization: Bearer ' . $access_token,
+        ));
+    }
     curl_setopt($ch, CURLOPT_HTTPGET, true);
     $postsBody = curl_exec($ch);
     $postsHttp = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -214,6 +357,23 @@ if ($is_admin && $access_token !== '' && $current_user_id !== null && $current_u
 
 $cidade = $profileCidade;
 
+$csrf = csrf_token();
+$bigHandle = $clLabel !== '' && $clLabel !== 'CL00' ? $clLabel : ($profileUsername !== '' ? '@' . $profileUsername : 'Membro');
+$relLower = strtolower(trim($profileRelationship));
+$allowedRelForm = ['solteiro', 'solteira', 'casal', 'casado', 'casada'];
+$relSel = in_array($relLower, $allowedRelForm, true) ? $relLower : '';
+if ($relSel === '' && $relLower === 'single') {
+    $relSel = 'solteiro';
+}
+if ($relSel === '' && $relLower === 'couple') {
+    $relSel = 'casal';
+}
+$showPartnerAge = ($relSel === 'casal' || $relLower === 'couple');
+
+$igShowAge = $profileAge !== null;
+$igShowCity = trim($cidade) !== '';
+$igShowRel = trim($profileRelationship) !== '';
+
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -221,6 +381,7 @@ $cidade = $profileCidade;
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Perfil — Club61</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" crossorigin="anonymous">
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         html { height: 100%; }
@@ -416,6 +577,25 @@ $cidade = $profileCidade;
             color: #fff;
             border-color: #7B2EFF;
             box-shadow: 0 0 24px rgba(123, 46, 255, 0.55), 0 0 48px rgba(123, 46, 255, 0.2);
+        }
+        .dark-btn { border-radius: 6px; }
+        .ig-actions .btn-follow.dark-btn {
+            display: inline-block;
+            width: auto;
+            margin-top: 0;
+            padding: 8px 16px;
+            font-size: 0.85rem;
+        }
+        .btn-follow.dark-btn.is-following {
+            background: #1a1a1a;
+            color: #b0b0b0;
+            border-color: #444;
+        }
+        .btn-follow.dark-btn.is-following:hover {
+            background: #252525;
+            color: #e0e0e0;
+            border-color: #555;
+            box-shadow: 0 0 12px rgba(255, 255, 255, 0.06);
         }
         .follow-wrap { margin-top: 4px; }
         .section-head {
@@ -631,6 +811,108 @@ $cidade = $profileCidade;
             z-index: 310;
         }
         .post-modal-close:hover { background: rgba(255, 255, 255, 0.22); }
+        /* Instagram-style header (tema escuro existente) */
+        .ig-header {
+            display: flex;
+            gap: 22px;
+            align-items: flex-start;
+            text-align: left;
+            margin-bottom: 22px;
+            flex-wrap: wrap;
+        }
+        .ig-avatar-col { flex-shrink: 0; }
+        .ig-avatar-img {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #333;
+            display: block;
+            background: #1A1A1A;
+        }
+        .ig-avatar-fallback {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            border: 2px solid #333;
+            background: #1A1A1A;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.2rem;
+            color: #7B2EFF;
+        }
+        .ig-main-col { flex: 1; min-width: 0; }
+        .ig-username {
+            margin: 0 0 10px;
+            font-size: clamp(1.35rem, 4vw, 1.65rem);
+            font-weight: 700;
+            color: #fff;
+            letter-spacing: 0.02em;
+        }
+        .ig-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
+        .btn-ig-edit, .btn-ig-msg {
+            display: inline-block;
+            padding: 7px 16px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border-radius: 999px;
+            border: 1px solid #333;
+            background: #161616;
+            color: #e0e0e0;
+            text-decoration: none;
+            font-family: inherit;
+            cursor: pointer;
+        }
+        .btn-ig-edit:hover, .btn-ig-msg:hover { border-color: #555; color: #fff; }
+        .btn-ig-msg--muted { opacity: 0.75; cursor: default; border-style: dashed; }
+        .ig-stats {
+            display: flex;
+            gap: 18px;
+            margin-bottom: 12px;
+            justify-content: flex-start;
+        }
+        .ig-stat { text-align: center; min-width: 56px; }
+        .ig-stat-num { font-weight: 700; font-size: 1rem; color: #fff; }
+        .ig-stat-lbl { font-size: 0.62rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+        .ig-meta-line { font-size: 0.88rem; color: #bbb; margin-bottom: 8px; }
+        .ig-bio { font-size: 0.9rem; color: #ccc; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+        .perfil-location-row {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 14px;
+            margin-bottom: 14px;
+        }
+        .location-save-status { font-size: 0.8rem; color: #888; }
+        .form-perfil .btn-salvar-perfil { width: auto; margin-left: auto; display: block; padding: 10px 20px; font-size: 0.85rem; }
+        .form-perfil textarea {
+            width: 100%;
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            font-size: 0.9375rem;
+            color: #fff;
+            background: #1A1A1A;
+            border: 1px solid #333333;
+            border-radius: 4px;
+            outline: none;
+            min-height: 72px;
+            resize: vertical;
+            font-family: inherit;
+        }
+        .form-perfil textarea:focus { border-color: #7B2EFF; }
+        .form-perfil input[type="number"] {
+            width: 100%;
+            margin-bottom: 14px;
+            padding: 12px 14px;
+            font-size: 0.9375rem;
+            color: #fff;
+            background: #1A1A1A;
+            border: 1px solid #333333;
+            border-radius: 4px;
+        }
+        #partner-age-wrap { display: none; }
+        #partner-age-wrap.is-on { display: block; }
     </style>
 </head>
 <body>
@@ -653,6 +935,76 @@ $cidade = $profileCidade;
 
             <div class="auth-card">
                 <h1 class="auth-brand">Perfil</h1>
+                <div class="ig-header">
+                    <div class="ig-avatar-col">
+                        <?php if ($avatarUrl !== ''): ?>
+                        <img class="ig-avatar-img" src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="">
+                        <?php else: ?>
+                        <div class="ig-avatar-fallback" aria-hidden="true">&#128100;</div>
+                        <?php endif; ?>
+                    </div>
+                    <div class="ig-main-col">
+                        <h2 class="ig-username"><?= htmlspecialchars($bigHandle, ENT_QUOTES, 'UTF-8') ?></h2>
+                        <div class="ig-actions">
+                            <?php if ($is_own_profile): ?>
+                            <a class="btn-ig-edit" href="#form-perfil">Editar perfil</a>
+                            <?php elseif (!$is_own_profile && $current_user_id !== null && $profile_lookup_id !== ''): ?>
+                            <button type="button" id="profile-follow-btn" class="btn btn-follow dark-btn js-follow-toggle<?= $isFollowingProfile ? ' is-following' : '' ?>"
+                                data-following-id="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>"
+                                data-following="<?= $isFollowingProfile ? '1' : '0' ?>"
+                                aria-pressed="<?= $isFollowingProfile ? 'true' : 'false' ?>">
+                                <?= $isFollowingProfile ? 'Seguindo' : 'Seguir' ?>
+                            </button>
+                            <?php endif; ?>
+                            <?php if (!$is_own_profile && $mrBtn !== 'hidden'): ?>
+                                <?php if ($mrBtn === 'request'): ?>
+                                <form action="/features/profile/message_request.php" method="post" style="display:inline">
+                                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="to_user" value="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="return_to" value="<?= htmlspecialchars('/features/profile/index.php?user=' . rawurlencode((string) $profile_lookup_id), ENT_QUOTES, 'UTF-8') ?>">
+                                    <button type="submit" class="btn-ig-msg">Pedir mensagem</button>
+                                </form>
+                                <?php elseif ($mrBtn === 'pending_sent'): ?>
+                                <span class="btn-ig-msg btn-ig-msg--muted" title="Aguardando resposta">Pedido enviado</span>
+                                <?php elseif ($mrBtn === 'pending_inbox'): ?>
+                                <a class="btn-ig-msg" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
+                                <?php elseif ($mrBtn === 'accepted'): ?>
+                                <a class="btn-ig-msg" href="/features/chat/dm.php?with=<?= rawurlencode((string) $profile_lookup_id) ?>">Mensagem</a>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
+                        <div class="ig-stats" aria-label="Estatísticas">
+                            <div class="ig-stat">
+                                <div class="ig-stat-num"><?= (int) $statPosts ?></div>
+                                <div class="ig-stat-lbl">Posts</div>
+                            </div>
+                            <div class="ig-stat">
+                                <div class="ig-stat-num"><?= (int) $statLikesRecv ?></div>
+                                <div class="ig-stat-lbl">Curtidas</div>
+                            </div>
+                            <div class="ig-stat">
+                                <div class="ig-stat-num" id="profile-followers-count" data-followers-count="<?= (int) $statFollowersCount ?>"><?= (int) $statFollowersCount ?></div>
+                                <div class="ig-stat-lbl">Seguidores</div>
+                            </div>
+                        </div>
+                        <?php if ($igShowAge || $igShowCity || $igShowRel): ?>
+                        <p class="ig-meta-line">
+                            <?php if ($igShowAge): ?><?= (int) $profileAge ?> anos<?php endif; ?>
+                            <?php if ($igShowCity): ?>
+                                <?php if ($igShowAge): ?> • <?php endif; ?>
+                                <span class="ig-meta-geo"><i class="bi bi-geo-alt" aria-hidden="true"></i><?= htmlspecialchars(trim($cidade), ENT_QUOTES, 'UTF-8') ?></span>
+                            <?php endif; ?>
+                            <?php if ($igShowRel): ?>
+                                <?php if ($igShowAge || $igShowCity): ?> • <?php endif; ?>
+                                <?= htmlspecialchars(club61_relationship_label($profileRelationship), ENT_QUOTES, 'UTF-8') ?>
+                            <?php endif; ?>
+                        </p>
+                        <?php endif; ?>
+                        <?php if ($profileBio !== ''): ?>
+                        <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
+                        <?php endif; ?>
+                    </div>
+                </div>
                 <?php if (
                     (string) $profile_user_id === (string) $current_user_id
                     && $current_user_id !== null
@@ -666,19 +1018,15 @@ $cidade = $profileCidade;
                 </p>
                 <?php endif; ?>
                 <p class="auth-sub">Identificador do membro neste espaço.</p>
-                <div class="avatar-stack">
-                <?php if ($avatarUrl !== ''): ?>
-                <img class="avatar-img" src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="">
-                <?php else: ?>
-                <div class="avatar" aria-hidden="true">&#128100;</div>
-                <?php endif; ?>
                 <?php if ((string) $profile_user_id === (string) $current_user_id && $current_user_id !== null): ?>
+                <div class="avatar-stack" style="margin-bottom:12px">
                 <form class="avatar-upload-form" action="upload_avatar.php" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                     <input type="file" class="avatar-file-input" name="avatar" id="avatar-file-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onchange="this.form.submit()">
                     <button type="button" class="btn-alterar-foto" onclick="document.getElementById('avatar-file-input').click();">Alterar foto</button>
                 </form>
-                <?php endif; ?>
                 </div>
+                <?php endif; ?>
                 <div class="profile-id"><?php echo htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8'); ?></div>
 
                 <?php
@@ -686,7 +1034,25 @@ $cidade = $profileCidade;
                 $tipoSelecionado = in_array($profileTipo, $tiposValidos, true) ? $profileTipo : '';
                 ?>
                 <?php if ((string) $profile_user_id === (string) $current_user_id && $current_user_id !== null): ?>
-                <form class="form-perfil" action="update_profile.php" method="post" autocomplete="on">
+                <form id="form-perfil" class="form-perfil" action="update_profile.php" method="post" autocomplete="on">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                    <label for="perfil-bio">Bio</label>
+                    <textarea id="perfil-bio" name="bio" rows="3" maxlength="2000" placeholder="Uma linha sobre você"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></textarea>
+                    <label for="perfil-age">Idade</label>
+                    <input id="perfil-age" type="number" name="age" min="18" max="120" placeholder="Ex.: 32" value="<?= $profileAge !== null ? (int) $profileAge : '' ?>">
+                    <label for="perfil-rel">Relacionamento</label>
+                    <select id="perfil-rel" name="relationship_type" required>
+                        <option value="" disabled<?= $relSel === '' ? ' selected' : '' ?>>Selecione…</option>
+                        <option value="solteiro"<?= $relSel === 'solteiro' ? ' selected' : '' ?>>Solteiro</option>
+                        <option value="solteira"<?= $relSel === 'solteira' ? ' selected' : '' ?>>Solteira</option>
+                        <option value="casal"<?= $relSel === 'casal' ? ' selected' : '' ?>>Casal</option>
+                        <option value="casado"<?= $relSel === 'casado' ? ' selected' : '' ?>>Casado</option>
+                        <option value="casada"<?= $relSel === 'casada' ? ' selected' : '' ?>>Casada</option>
+                    </select>
+                    <div id="partner-age-wrap" class="<?= $showPartnerAge ? 'is-on' : '' ?>">
+                        <label for="perfil-partner-age">Idade do(a) parceiro(a)</label>
+                        <input id="perfil-partner-age" type="number" name="partner_age" min="18" max="120" placeholder="Ex.: 30" value="<?= $profilePartnerAge !== null ? (int) $profilePartnerAge : '' ?>">
+                    </div>
                     <label for="perfil-tipo">Tipo</label>
                     <select id="perfil-tipo" name="tipo" required>
                         <option value="" disabled<?php echo $tipoSelecionado === '' ? ' selected' : ''; ?>>Selecione…</option>
@@ -696,11 +1062,16 @@ $cidade = $profileCidade;
                     </select>
                     <label for="perfil-cidade">Cidade</label>
                     <input id="perfil-cidade" type="text" name="cidade" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Sua cidade" maxlength="120">
-                    <button class="btn-salvar-perfil" type="submit">Salvar perfil</button>
+                    <div class="perfil-location-row">
+                        <button type="button" class="btn-ig-edit" id="btn-usar-localizacao">Usar minha localização</button>
+                        <span id="location-save-status" class="location-save-status" aria-live="polite"></span>
+                    </div>
+                    <button class="btn-salvar-perfil" type="submit">Salvar</button>
                 </form>
+                <?php endif; ?>
 
                 <div class="posts-section">
-                    <h2 class="section-head">Minhas publicações</h2>
+                    <h2 class="section-head">Publicações</h2>
                     <?php if (empty($myPostsForGrid)): ?>
                         <p class="posts-empty">Nenhuma publicação ainda.</p>
                     <?php else: ?>
@@ -717,16 +1088,6 @@ $cidade = $profileCidade;
                     <?php endif; ?>
                 </div>
 
-                <?php endif; ?>
-
-                <?php if ((string) $profile_user_id !== (string) $current_user_id): ?>
-                <div class="follow-wrap">
-                    <form action="follow.php" method="POST">
-                        <input type="hidden" name="followed_id" value="<?php echo htmlspecialchars((string) $profile_user_id, ENT_QUOTES, 'UTF-8'); ?>">
-                        <button class="btn btn-follow" type="submit">+ Seguir</button>
-                    </form>
-                </div>
-                <?php endif; ?>
             </div>
 
             <?php if ($is_admin): ?>
@@ -735,6 +1096,7 @@ $cidade = $profileCidade;
                 <p class="auth-sub auth-sub--tight">Gere códigos para novos membros.</p>
 
                 <form class="form-invite" action="generate_invite.php" method="POST">
+                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="btn" type="submit">Gerar novo convite</button>
                 </form>
 
@@ -763,6 +1125,87 @@ $cidade = $profileCidade;
     </div>
     <script>
     (function () {
+        var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        var followBtn = document.getElementById('profile-follow-btn');
+        var followersEl = document.getElementById('profile-followers-count');
+        if (followBtn) {
+            followBtn.addEventListener('click', function () {
+                var fid = followBtn.getAttribute('data-following-id');
+                if (!fid) return;
+                followBtn.disabled = true;
+                var fd = new FormData();
+                fd.append('following_id', fid);
+                fd.append('csrf', PROFILE_CSRF);
+                fetch('/features/profile/follow_toggle.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d.csrf) PROFILE_CSRF = d.csrf;
+                        if (!d.ok) return;
+                        var follow = !!d.following;
+                        followBtn.setAttribute('data-following', follow ? '1' : '0');
+                        followBtn.setAttribute('aria-pressed', follow ? 'true' : 'false');
+                        followBtn.textContent = follow ? 'Seguindo' : 'Seguir';
+                        followBtn.classList.toggle('is-following', follow);
+                        if (followersEl && typeof d.followers_count === 'number') {
+                            followersEl.textContent = String(d.followers_count);
+                            followersEl.setAttribute('data-followers-count', String(d.followers_count));
+                        }
+                    })
+                    .catch(function () {})
+                    .finally(function () { followBtn.disabled = false; });
+            });
+        }
+        var rel = document.getElementById('perfil-rel');
+        var pw = document.getElementById('partner-age-wrap');
+        function syncPartner() {
+            if (!rel || !pw) return;
+            pw.classList.toggle('is-on', rel.value === 'casal');
+        }
+        if (rel) {
+            rel.addEventListener('change', syncPartner);
+            syncPartner();
+        }
+        var btnLoc = document.getElementById('btn-usar-localizacao');
+        var locStatus = document.getElementById('location-save-status');
+        if (btnLoc) {
+            if (!navigator.geolocation) {
+                btnLoc.disabled = true;
+                if (locStatus) locStatus.textContent = 'Geolocalização não suportada neste navegador.';
+            } else {
+                btnLoc.addEventListener('click', function () {
+                    if (locStatus) locStatus.textContent = 'A obter localização…';
+                    btnLoc.disabled = true;
+                    navigator.geolocation.getCurrentPosition(
+                        function (pos) {
+                            var fd = new FormData();
+                            fd.append('latitude', String(pos.coords.latitude));
+                            fd.append('longitude', String(pos.coords.longitude));
+                            fd.append('csrf', PROFILE_CSRF);
+                            fetch('/features/profile/save_location.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                                .then(function (r) { return r.json(); })
+                                .then(function (d) {
+                                    if (d.csrf) PROFILE_CSRF = d.csrf;
+                                    if (d.ok) {
+                                        if (locStatus) locStatus.textContent = 'Localização guardada.';
+                                        try { localStorage.setItem('club61_location_updated_at', String(Date.now())); } catch (e) {}
+                                    } else {
+                                        if (locStatus) locStatus.textContent = (d.error === 'rate_limit') ? 'Aguarde um momento.' : 'Não foi possível guardar.';
+                                    }
+                                })
+                                .catch(function () {
+                                    if (locStatus) locStatus.textContent = 'Erro de rede.';
+                                })
+                                .finally(function () { btnLoc.disabled = false; });
+                        },
+                        function () {
+                            if (locStatus) locStatus.textContent = 'Permissão negada ou localização indisponível.';
+                            btnLoc.disabled = false;
+                        },
+                        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+                    );
+                });
+            }
+        }
         var modal = document.getElementById('postModal');
         var modalImg = document.getElementById('postModalImg');
         if (!modal || !modalImg) return;

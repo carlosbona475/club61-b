@@ -1,77 +1,46 @@
 <?php
+declare(strict_types=1);
+
 require_once __DIR__ . '/../../auth_guard.php';
 require_once __DIR__ . '/../../config/supabase.php';
+require_once __DIR__ . '/../../config/csrf.php';
+require_once __DIR__ . '/../../config/upload_validate.php';
 
-$userId = $_SESSION['user_id'] ?? null;
-$token = $_SESSION['access_token'] ?? '';
+$userId = isset($_SESSION['user_id']) ? trim((string) $_SESSION['user_id']) : '';
+$token  = isset($_SESSION['access_token']) ? trim((string) $_SESSION['access_token']) : '';
 
-if ($userId === null || $userId === '' || $token === '') {
+if ($userId === '' || $token === '') {
     header('Location: /features/auth/login.php');
     exit;
 }
 
 if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
-    header('Location: upload_story.php?status=error&message=' . urlencode('Configure SUPABASE_SERVICE_KEY em config/supabase.php.'));
+    header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode('Configure SUPABASE_SERVICE_KEY em config/supabase.php.'));
     exit;
 }
 
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
-/**
- * @return string|null MIME ou null
- */
-function upload_story_mime(string $tmpPath): ?string
-{
-    if (is_readable($tmpPath) && function_exists('mime_content_type')) {
-        $m = @mime_content_type($tmpPath);
-        if ($m && $m !== 'application/octet-stream') {
-            return $m;
-        }
-    }
-    if (is_readable($tmpPath) && class_exists('finfo')) {
-        $fi = new finfo(FILEINFO_MIME_TYPE);
-        $m = $fi->file($tmpPath);
-        if ($m) {
-            return $m;
-        }
-    }
-
-    return null;
-}
-
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
+        header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode('Sessão expirada. Atualize a página.'));
+        exit;
+    }
     $file = $_FILES['story_image'] ?? null;
-
-    if (!$file || !isset($file['tmp_name']) || $file['error'] !== UPLOAD_ERR_OK) {
-        header('Location: upload_story.php?status=error&message=' . urlencode('Erro ao enviar arquivo.'));
-        exit;
-    }
-
     $allowed = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp'];
-    $mime = upload_story_mime($file['tmp_name']);
-
-    if ($mime === null || !isset($allowed[$mime])) {
-        header('Location: upload_story.php?status=error&message=' . urlencode('Use JPG, PNG ou WEBP.'));
+    $check = club61_validate_image_upload(is_array($file) ? $file : null, 5 * 1024 * 1024, $allowed);
+    if (!$check['ok']) {
+        header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode($check['error']));
         exit;
     }
 
-    if ($file['size'] > 8 * 1024 * 1024) {
-        header('Location: upload_story.php?status=error&message=' . urlencode('Imagem muito grande. Máximo 8MB.'));
-        exit;
-    }
-
-    $ext = $allowed[$mime];
-    $uniq = bin2hex(random_bytes(8));
-    $safeUser = preg_replace('/[^a-zA-Z0-9\-]/', '', (string) $userId);
-    if ($safeUser === '') {
-        $safeUser = 'user';
-    }
-    $filename = $safeUser . '_' . $uniq . '.' . $ext;
+    $mime = $check['mime'];
+    $filename = bin2hex(random_bytes(16)) . '.' . $check['ext'];
 
     $binary = file_get_contents($file['tmp_name']);
     if ($binary === false) {
-        header('Location: upload_story.php?status=error&message=' . urlencode('Não foi possível ler o arquivo.'));
+        header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode('Não foi possível ler o arquivo.'));
         exit;
     }
 
@@ -97,18 +66,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($storageCode < 200 || $storageCode >= 300) {
         $err = $resBody !== false && $resBody !== '' ? substr($resBody, 0, 200) : ('HTTP ' . $storageCode);
-        header('Location: upload_story.php?status=error&message=' . urlencode('Storage: ' . $err));
+        header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode('Storage: ' . $err));
         exit;
     }
 
     $publicUrl = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/stories/' . $filename;
-    $expiresAt = gmdate('Y-m-d\TH:i:s\Z', time() + 86400);
+
+    $expiresAt = (new DateTimeImmutable('now', new DateTimeZone('UTC')))
+        ->modify('+24 hours')
+        ->format('Y-m-d\TH:i:s\Z');
 
     $insertPayload = json_encode([
-        'user_id' => $userId,
-        'image_url' => $publicUrl,
+        'user_id'    => (string) $userId,
+        'image_url'  => $publicUrl,
         'expires_at' => $expiresAt,
-    ]);
+    ], JSON_UNESCAPED_SLASHES);
 
     $chIns = curl_init(SUPABASE_URL . '/rest/v1/stories');
     curl_setopt_array($chIns, [
@@ -129,12 +101,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     curl_close($chIns);
 
     if ($insCode < 200 || $insCode >= 300) {
-        $errIns = $insBody !== false && $insBody !== '' ? substr($insBody, 0, 300) : ('HTTP ' . $insCode);
-        header('Location: upload_story.php?status=error&message=' . urlencode('Imagem salva, mas falha ao registrar story: ' . $errIns));
+        $errIns = $insBody !== false && $insBody !== '' ? $insBody : ('HTTP ' . $insCode);
+        header('Location: /features/profile/upload_story.php?status=error&message=' . urlencode('ERRO INSERT stories | HTTP ' . $insCode . ' | ' . $errIns));
         exit;
     }
 
-    header('Location: upload_story.php?status=ok&message=' . urlencode('Story enviado com sucesso!'));
+    header('Location: /features/profile/upload_story.php?status=ok&message=' . urlencode('Story enviado! Fica disponível por 24h.'));
     exit;
 }
 
@@ -273,13 +245,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <div class="alert error"><?php echo htmlspecialchars($message !== '' ? $message : 'Erro ao enviar.', ENT_QUOTES, 'UTF-8'); ?></div>
             <?php endif; ?>
 
-            <form method="post" action="upload_story.php" enctype="multipart/form-data">
+            <form method="post" action="/features/profile/upload_story.php" enctype="multipart/form-data">
+                <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
                 <input type="file" id="storyFile" name="story_image" accept="image/jpeg,image/png,image/webp" required>
                 <button type="button" class="file-btn" id="chooseBtn" onclick="document.getElementById('storyFile').click()">📷 Toque para escolher imagem</button>
                 <img id="preview" src="" alt="Prévia do story">
                 <button class="btn-send" type="submit">Enviar story</button>
             </form>
-            <p class="hint">JPG, PNG ou WEBP · até 8MB · crie o bucket <code style="color:#666">stories</code> no Supabase se ainda não existir.</p>
+            <p class="hint">JPG, PNG ou WEBP · até 5MB · visível por <strong>24 horas</strong> · bucket <code style="color:#666">stories</code> no Supabase.</p>
         </div>
     </div>
     <script>

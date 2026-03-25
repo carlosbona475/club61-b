@@ -1,20 +1,14 @@
 Options -Indexes
-php_flag display_errors off
-php_value session.cookie_httponly 1
-php_value session.cookie_samesite Lax
 DirectoryIndex index.php index.html
 
-# Cabeçalhos de segurança (opcional; requer mod_headers — evita duplicar se já enviar via PHP)
-# <IfModule mod_headers.c>
-#     Header always set X-Content-Type-Options "nosniff"
-#     Header always set X-Frame-Options "SAMEORIGIN"
-#     Header always set Referrer-Policy "strict-origin-when-cross-origin"
-# </IfModule>
+# Evitar php_flag/php_value: em PHP-FPM e muitas partilhadas (ex. InfinityFree) o Apache
+# devolve HTTP 500. Sessão: já definida em config/session.php; opcional .user.ini na raiz.
 
-<FilesMatch "\.(sql|gitignore|md)$">
-    Order Allow,Deny
-    Deny from all
-</FilesMatch>
+<IfModule mod_authz_core.c>
+    <FilesMatch "\.(sql|gitignore|md)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
 
 RewriteEngine On
 RewriteCond %{REQUEST_FILENAME} !-f

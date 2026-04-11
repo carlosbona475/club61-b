@@ -47,10 +47,13 @@ return [
         'POST /feed/add-comment' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'feedAddComment']],
         'GET /profile' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'profileIndex']],
         'GET /chat/general' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
+        'POST /chat/general' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
         'POST /features/feed/create_post.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'feedCreatePost']],
         'POST /features/feed/toggle_like.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'feedToggleLike']],
         'POST /features/feed/add_comment.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'feedAddComment']],
         'GET /features/profile/index.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'profileIndex']],
+        'GET /features/chat/salas.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatSalas']],
         'GET /features/chat/general.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
+        'POST /features/chat/general.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
     ],
 ];

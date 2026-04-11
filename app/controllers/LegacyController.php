@@ -37,5 +37,10 @@ final class LegacyController
     {
         require \CLUB61_BASE_PATH . '/features/chat/general.php';
     }
+
+    public function chatSalas(Request $request): void
+    {
+        require \CLUB61_BASE_PATH . '/features/chat/salas.php';
+    }
 }
 

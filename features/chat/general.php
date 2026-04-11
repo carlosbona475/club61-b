@@ -12,6 +12,20 @@ if ($current_user_id === '' || $access_token === '' || !defined('SUPABASE_SERVIC
     exit;
 }
 
+require_once dirname(__DIR__, 2) . '/config/city_rooms.php';
+
+$sala = '';
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $sala = trim((string) ($_POST['sala'] ?? ''));
+} else {
+    $sala = trim((string) ($_GET['sala'] ?? ''));
+}
+$roomMeta = club61_city_room_by_slug($sala);
+if ($roomMeta === null) {
+    header('Location: /features/chat/salas.php');
+    exit;
+}
+
 function chat_service_headers(bool $json = false): array
 {
     $h = [
@@ -97,6 +111,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'content'    => $content,
             'media_url'  => $media_url,
             'media_type' => $media_type,
+            'sala'       => $sala,
         ], JSON_UNESCAPED_SLASHES);
         $sk = SUPABASE_SERVICE_KEY;
         $ch = curl_init(SUPABASE_URL . '/rest/v1/general_messages');
@@ -116,12 +131,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         curl_exec($ch);
         curl_close($ch);
     }
-    header('Location: /features/chat/general.php');
+    header('Location: /features/chat/general.php?' . http_build_query(['sala' => $sala]));
     exit;
 }
 
 $messages = [];
-$url = SUPABASE_URL . '/rest/v1/general_messages?select=id,user_id,content,media_url,media_type,created_at&order=created_at.desc&limit=60';
+$url = SUPABASE_URL . '/rest/v1/general_messages?select=id,user_id,content,media_url,media_type,created_at'
+    . '&sala=eq.' . rawurlencode($sala)
+    . '&order=created_at.desc&limit=60';
 $ch = curl_init($url);
 curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
@@ -212,7 +229,7 @@ function date_divider_label(string $dayKey): string
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>Chat Geral — Club61</title>
+<title><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?> — Club61</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;height:100dvh}
@@ -280,8 +297,8 @@ body{
 <body>
 
 <header class="ch-top">
-  <a href="/features/feed/index.php" aria-label="Voltar">←</a>
-  <div class="ch-title-wrap"><span aria-hidden="true">💬</span><span class="ch-title">Chat Geral</span></div>
+  <a href="/features/chat/salas.php" aria-label="Voltar às salas">←</a>
+  <div class="ch-title-wrap"><span aria-hidden="true"><?= htmlspecialchars($roomMeta['emoji'], ENT_QUOTES, 'UTF-8') ?></span><span class="ch-title"><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?></span></div>
   <a href="/features/chat/inbox.php" aria-label="Mensagens">✉️</a>
 </header>
 
@@ -381,7 +398,8 @@ foreach ($messages as $m):
 </div>
 
 <div class="ch-foot">
-<form method="POST" action="/features/chat/general.php" enctype="multipart/form-data" style="display:contents" id="msgForm">
+<form method="POST" action="/features/chat/general.php?<?= htmlspecialchars(http_build_query(['sala' => $sala]), ENT_QUOTES, 'UTF-8') ?>" enctype="multipart/form-data" style="display:contents" id="msgForm">
+  <input type="hidden" name="sala" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
   <input type="file" id="gmFile" name="media"
          accept="image/*,video/mp4,video/webm" style="display:none">
   <button type="button" id="gmFileBtn"
@@ -412,7 +430,7 @@ foreach ($messages as $m):
 <nav class="bottomnav" aria-label="Navegação">
   <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
   <a href="/features/profile/upload_story.php"><span>📷</span>Story</a>
-  <a class="is-active" href="/features/chat/general.php"><span>💬</span>Chat</a>
+  <a class="is-active" href="/features/chat/salas.php"><span>🏙️</span>Salas</a>
   <a href="/features/profile/index.php"><span>👤</span>Perfil</a>
   <a href="/features/auth/logout.php"><span>🚪</span>Sair</a>
 </nav>
@@ -470,9 +488,15 @@ function clearGmFile() {
     <?= json_encode(SUPABASE_URL, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
     <?= json_encode(SUPABASE_ANON_KEY, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>
   );
+  var salaSlug = <?= json_encode($sala, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
   var channel = _sb
-    .channel('general-chat-live')
-    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'general_messages' }, function () {
+    .channel('general-chat-' + salaSlug)
+    .on('postgres_changes', {
+      event: 'INSERT',
+      schema: 'public',
+      table: 'general_messages',
+      filter: 'sala=eq.' + salaSlug,
+    }, function () {
       window.location.reload();
     })
     .subscribe();

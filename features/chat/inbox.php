@@ -1,8 +1,8 @@
 <?php
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
-require_once __DIR__ . '/../../config/online.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/config/online.php';
 
 $current_user_id = trim((string) ($_SESSION['user_id'] ?? ''));
 $access_token = trim((string) ($_SESSION['access_token'] ?? ''));

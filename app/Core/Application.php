@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Club61\Core;
 
-use Club61\Http\Controllers\FeedController;
+use Club61\Controllers\AuthController;
+use Club61\Controllers\FeedController;
+use Club61\Controllers\LegacyController;
 use Club61\Http\Middleware\AuthenticateMiddleware;
 use Club61\Http\Middleware\SessionMiddleware;
 use Club61\Http\Middleware\TouchLastSeenMiddleware;
@@ -12,6 +14,9 @@ use Club61\Infrastructure\Http\SupabaseRestClient;
 use Club61\Repositories\PostRepository;
 use Club61\Repositories\ProfileRepository;
 use Club61\Repositories\StoryRepository;
+use Club61\Services\LastSeenService;
+use Club61\Services\SessionService;
+use Club61\Services\ConfigBootstrapService;
 use Club61\Services\FeedService;
 
 final class Application
@@ -35,7 +40,7 @@ final class Application
     public static function registerBindings(Container $c): void
     {
         $c->singleton(Router::class, static function (): Router {
-            /** @var array{middleware_groups: array<string, list<class-string>>, legacy_files: array<string, array{middleware: string, action: array{class-string, string}}>} $config */
+            /** @var array{middleware_groups: array<string, list<class-string>>, routes: array<string, array{middleware: string, action: array{class-string, string}}>} $config */
             $config = require \CLUB61_BASE_PATH . '/routes/web.php';
 
             return new Router($config);
@@ -47,61 +52,53 @@ final class Application
         $c->singleton(PostRepository::class, static fn (Container $container): PostRepository => new PostRepository($container->get(SupabaseRestClient::class)));
         $c->singleton(ProfileRepository::class, static fn (Container $container): ProfileRepository => new ProfileRepository($container->get(SupabaseRestClient::class)));
         $c->singleton(StoryRepository::class, static fn (Container $container): StoryRepository => new StoryRepository($container->get(SupabaseRestClient::class)));
+        $c->singleton(ConfigBootstrapService::class, static fn (): ConfigBootstrapService => new ConfigBootstrapService());
 
         $c->singleton(FeedService::class, static fn (Container $container): FeedService => new FeedService(
             $container->get(PostRepository::class),
             $container->get(ProfileRepository::class),
             $container->get(StoryRepository::class),
             $container->get(SupabaseRestClient::class),
+            $container->get(ConfigBootstrapService::class),
         ));
 
         $c->singleton(FeedController::class, static fn (Container $container): FeedController => new FeedController(
             $container->get(FeedService::class),
         ));
+        $c->singleton(AuthController::class, static fn (): AuthController => new AuthController());
+        $c->singleton(LegacyController::class, static fn (): LegacyController => new LegacyController());
 
-        $c->singleton(SessionMiddleware::class, static fn (): SessionMiddleware => new SessionMiddleware());
-        $c->singleton(AuthenticateMiddleware::class, static fn (): AuthenticateMiddleware => new AuthenticateMiddleware());
-        $c->singleton(TouchLastSeenMiddleware::class, static fn (): TouchLastSeenMiddleware => new TouchLastSeenMiddleware());
+        $c->singleton(SessionService::class, static fn (): SessionService => new SessionService());
+        $c->singleton(LastSeenService::class, static fn (): LastSeenService => new LastSeenService());
+        $c->singleton(SessionMiddleware::class, static fn (Container $container): SessionMiddleware => new SessionMiddleware(
+            $container->get(SessionService::class),
+        ));
+        $c->singleton(AuthenticateMiddleware::class, static fn (Container $container): AuthenticateMiddleware => new AuthenticateMiddleware(
+            $container->get(SessionService::class),
+        ));
+        $c->singleton(TouchLastSeenMiddleware::class, static fn (Container $container): TouchLastSeenMiddleware => new TouchLastSeenMiddleware(
+            $container->get(LastSeenService::class),
+            $container->get(SessionService::class),
+        ));
     }
 
-    /**
-     * Entrada a partir de um script legado em features/ (URL mantida).
-     */
-    public static function runLegacy(string $scriptPath): void
+    public static function runHttp(): void
     {
         $container = self::container();
-        $base = \CLUB61_BASE_PATH;
-        $realBase = realpath($base);
-        $realScript = realpath($scriptPath);
-        if ($realBase === false || $realScript === false) {
-            http_response_code(500);
-            echo 'Caminho inválido.';
-
-            return;
-        }
-        $realBase = str_replace('\\', '/', $realBase);
-        $realScript = str_replace('\\', '/', $realScript);
-        $prefix = rtrim($realBase, '/') . '/';
-        if (!str_starts_with($realScript, $prefix)) {
-            http_response_code(500);
-            echo 'Script fora do projeto.';
-
-            return;
-        }
-        $rel = ltrim(substr($realScript, strlen($prefix)), '/');
-
         $router = $container->get(Router::class);
-        $match = $router->matchLegacyScript($rel);
+        $request = Request::fromGlobals();
+        $path = (string) ($request->server['REQUEST_URI'] ?? '/');
+        $method = $request->method();
+        $match = $router->match($method, $path);
         if ($match === null) {
-            http_response_code(500);
-            echo 'Rota legada não registada: ' . htmlspecialchars($rel, ENT_QUOTES, 'UTF-8');
+            http_response_code(404);
+            echo 'Rota não encontrada.';
 
             return;
         }
 
         $middlewareNames = $router->middlewareGroup($match['middleware']);
         $action = $match['action'];
-        $request = Request::fromGlobals();
 
         $pipeline = $container->get(MiddlewarePipeline::class);
         $destination = static function (Request $req) use ($container, $action): void {
@@ -111,12 +108,5 @@ final class Application
         };
 
         $pipeline->dispatch($request, $middlewareNames, $destination);
-    }
-
-    /** Raiz do site (DirectoryIndex) — mantém redirecionamento para o feed. */
-    public static function runWebFront(): void
-    {
-        header('Location: /features/feed/index.php');
-        exit;
     }
 }

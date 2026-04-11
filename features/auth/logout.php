@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../config/security_headers.php';
-require_once __DIR__ . '/../../config/session.php';
+require_once dirname(__DIR__, 2) . '/config/security_headers.php';
+require_once dirname(__DIR__, 2) . '/config/session.php';
 
 club61_security_headers();
 club61_session_start_safe();

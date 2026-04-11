@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/geo.php';
-require_once __DIR__ . '/../../config/followers.php';
-require_once __DIR__ . '/../../config/csrf.php';
-require_once __DIR__ . '/../../config/online.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/geo.php';
+require_once dirname(__DIR__, 2) . '/config/followers.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/online.php';
 
 $me = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($me === '') {

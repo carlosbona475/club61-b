@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 declare(strict_types=1);
 
 use Club61\Support\FeedFormatting;
@@ -206,7 +206,7 @@ a{color:inherit}
 <body>
 
 <header class="topnav">
-  <a class="topnav-brand" href="/features/feed/index.php">Club61</a>
+  <a class="topnav-brand" href="/feed">Club61</a>
   <div class="topnav-right">
     <span class="topnav-count"><?= (int) $membros_ativos ?> membros</span>
     <a class="feed-loc-nav-btn js-feed-loc" href="/features/location/index.php" title="Locais" aria-label="Descobrir locais próximos">
@@ -217,7 +217,7 @@ a{color:inherit}
         <path d="M12 2v2M12 20v2M2 12h2M20 12h2" opacity="0.6"/>
       </svg>
     </a>
-    <a class="topnav-profile" href="/features/profile/index.php" title="Perfil" aria-label="Perfil">👤</a>
+    <a class="topnav-profile" href="/profile" title="Perfil" aria-label="Perfil">👤</a>
   </div>
 </header>
 
@@ -365,25 +365,25 @@ a{color:inherit}
 </a>
 
 <nav class="bottomnav" aria-label="Navegação principal">
-  <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
+  <a href="/feed"><span>🏠</span>Feed</a>
   <a href="/features/profile/upload_story.php"><span>📷</span>Story</a>
-  <a class="bnav-btn" href="/features/chat/general.php"><span>💬</span><span>Chat</span></a>
+  <a class="bnav-btn" href="/chat/general"><span>💬</span><span>Chat</span></a>
   <button type="button" class="nav-fab-wrap" id="openPostModal" aria-label="Nova publicação"><span class="nav-fab" aria-hidden="true">＋</span><span style="font-size:0.6rem;opacity:0">.</span></button>
-  <a href="/features/profile/index.php"><span>👤</span>Perfil</a>
+  <a href="/profile"><span>👤</span>Perfil</a>
   <?php if ($is_admin): ?>
   <a class="bnav-btn" href="/features/admin/index.php">
     <span>⚙️</span>
     <span>Admin</span>
   </a>
   <?php endif; ?>
-  <a href="/features/auth/logout.php"><span>🚪</span>Sair</a>
+  <a href="/logout"><span>🚪</span>Sair</a>
 </nav>
 
 <div id="postModalBackdrop" class="modal-backdrop" aria-hidden="true">
   <div class="modal-sheet" role="dialog" aria-labelledby="modalPostTitle" onclick="event.stopPropagation()">
     <div class="modal-handle" aria-hidden="true"></div>
     <h2 id="modalPostTitle" class="modal-title">Nova publicação</h2>
-    <form id="modalPostForm" action="/features/feed/create_post.php" method="post" enctype="multipart/form-data">
+    <form id="modalPostForm" action="/feed/create-post" method="post" enctype="multipart/form-data">
       <input type="hidden" name="csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
       <input type="file" id="postFile" name="image" accept="image/jpeg,image/png,image/webp" required>
       <div class="upload-zone" id="chooseArea" onclick="document.getElementById('postFile').click()">Toque para escolher imagem</div>
@@ -467,7 +467,7 @@ a{color:inherit}
       fd.append('post_id', pid);
       fd.append('csrf', FEED_CSRF);
       btn.disabled = true;
-      fetch('/features/feed/toggle_like.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+      fetch('/feed/toggle-like', { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(parseJsonSafe)
         .then(function(d){
           if (!d) {
@@ -514,7 +514,7 @@ a{color:inherit}
       fd.append('comment', text);
       fd.append('csrf', FEED_CSRF);
       if (btn) btn.disabled = true;
-      fetch('/features/feed/add_comment.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+      fetch('/feed/add-comment', { method: 'POST', body: fd, credentials: 'same-origin' })
         .then(parseJsonSafe)
         .then(function(d){
           if (!d) {

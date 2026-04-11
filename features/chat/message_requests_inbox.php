@@ -5,11 +5,11 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/csrf.php';
-require_once __DIR__ . '/../../config/feed_interactions.php';
-require_once __DIR__ . '/../../config/message_requests.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/feed_interactions.php';
+require_once dirname(__DIR__, 2) . '/config/message_requests.php';
 
 $uid = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($uid === '' || !mr_service_available()) {

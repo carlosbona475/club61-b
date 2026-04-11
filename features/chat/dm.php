@@ -1,8 +1,8 @@
 <?php
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
-require_once __DIR__ . '/../../config/online.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/config/online.php';
 
 $current_user_id = trim((string) ($_SESSION['user_id'] ?? ''));
 $access_token = trim((string) ($_SESSION['access_token'] ?? ''));
@@ -18,7 +18,7 @@ if ($other_id === '' || $other_id === $current_user_id) {
     exit;
 }
 
-require_once __DIR__ . '/../../config/message_requests.php';
+require_once dirname(__DIR__, 2) . '/config/message_requests.php';
 if (!mr_can_open_dm($current_user_id, $other_id)) {
     header('Location: /features/chat/inbox.php?msg=' . rawurlencode('O chat direto fica disponível após o pedido de mensagem ser aceito. Veja Pedidos de mensagem.'));
     exit;

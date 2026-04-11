@@ -10,7 +10,9 @@
     },
     "autoload": {
         "psr-4": {
-            "Club61\\": "app/"
+            "Club61\\": "app/",
+            "Club61\\Controllers\\": "app/controllers/",
+            "Club61\\Services\\": "app/services/"
         }
     },
     "autoload-dev": {

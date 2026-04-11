@@ -9,7 +9,7 @@ final class Router
     /**
      * @param array{
      *   middleware_groups: array<string, list<class-string>>,
-     *   legacy_files: array<string, array{middleware: string, action: array{class-string, string}}>
+     *   routes: array<string, array{middleware: string, action: array{class-string, string}}>
      * } $config
      */
     public function __construct(
@@ -20,12 +20,14 @@ final class Router
     /**
      * @return array{middleware: list<class-string>, action: array{class-string, string}}|null
      */
-    public function matchLegacyScript(string $relativePath): ?array
+    public function match(string $method, string $path): ?array
     {
-        $relativePath = str_replace('\\', '/', $relativePath);
-        $map = $this->config['legacy_files'] ?? [];
+        $method = strtoupper($method);
+        $path = '/' . ltrim((string) parse_url($path, PHP_URL_PATH), '/');
+        $key = $method . ' ' . $path;
+        $map = $this->config['routes'] ?? [];
 
-        return $map[$relativePath] ?? null;
+        return $map[$key] ?? null;
     }
 
     /**

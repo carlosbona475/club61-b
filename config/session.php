@@ -34,6 +34,10 @@ function club61_session_bootstrap(): void
     ini_set('session.cookie_httponly', '1');
     ini_set('session.cookie_samesite', 'Lax');
 
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
+
     $secure = club61_request_is_https();
 
     session_set_cookie_params([

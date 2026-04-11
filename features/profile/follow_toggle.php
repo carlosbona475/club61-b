@@ -8,10 +8,10 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/csrf.php';
-require_once __DIR__ . '/../../config/followers.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/followers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

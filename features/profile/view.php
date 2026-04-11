@@ -1,8 +1,8 @@
 <?php
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
 
 $access_token = $_SESSION['access_token'] ?? '';
 $current_user_id = $_SESSION['user_id'] ?? null;

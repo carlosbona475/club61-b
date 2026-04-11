@@ -1,8 +1,8 @@
 <?php
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
 
 /**
  * Rótulo em PT para exibição (valor salvo em minúsculas).
@@ -22,10 +22,10 @@ function club61_relationship_label(string $stored): string
 
     return $map[$k] ?? $stored;
 }
-require_once __DIR__ . '/../../config/csrf.php';
-require_once __DIR__ . '/../../config/profile_stats.php';
-require_once __DIR__ . '/../../config/message_requests.php';
-require_once __DIR__ . '/../../config/followers.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/profile_stats.php';
+require_once dirname(__DIR__, 2) . '/config/message_requests.php';
+require_once dirname(__DIR__, 2) . '/config/followers.php';
 
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';

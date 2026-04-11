@@ -1,9 +1,9 @@
 <?php
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
-require_once __DIR__ . '/../../config/csrf.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
 
 if (!isCurrentUserAdmin()) {
     header('Location: /features/profile/index.php?status=error&message=' . urlencode('Acesso negado'));

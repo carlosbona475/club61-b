@@ -1,10 +1,10 @@
 <?php
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/csrf.php';
-require_once __DIR__ . '/../../config/upload_validate.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/upload_validate.php';
 
 $userId = isset($_SESSION['user_id']) ? trim((string) $_SESSION['user_id']) : '';
 $token  = isset($_SESSION['access_token']) ? trim((string) $_SESSION['access_token']) : '';

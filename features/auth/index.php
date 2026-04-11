@@ -1,3 +1,3 @@
 <?php
 
-require_once __DIR__ . '/../../services/auth_service.php';
+require_once dirname(__DIR__, 2) . '/services/auth_service.php';

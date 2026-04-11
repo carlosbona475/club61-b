@@ -6,13 +6,19 @@ namespace Club61\Http\Middleware;
 
 use Club61\Core\Contracts\MiddlewareInterface;
 use Club61\Core\Request;
+use Club61\Services\SessionService;
 
 final class AuthenticateMiddleware implements MiddlewareInterface
 {
+    public function __construct(
+        private readonly SessionService $sessionService,
+    ) {
+    }
+
     public function handle(Request $request, callable $next): void
     {
-        if (empty($_SESSION['access_token']) || empty($_SESSION['user_id'])) {
-            header('Location: /features/auth/login.php');
+        if (!$this->sessionService->isAuthenticated()) {
+            header('Location: /login');
             exit;
         }
         $next($request);

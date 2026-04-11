@@ -1,4 +1,5 @@
 .env
+.env.local
 .cursor/
 .phpunit.cache/
 vendor/

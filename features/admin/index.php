@@ -9,10 +9,10 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/session.php';
-require_once __DIR__ . '/../../config/supabase.php';
-require_once __DIR__ . '/../../config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/session.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
 
 // Service role obrigatória para ler perfil e operações admin
 if (!defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {

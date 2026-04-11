@@ -1,6 +1,6 @@
 <?php
-require_once __DIR__ . '/../../auth_guard.php';
-require_once __DIR__ . '/../../config/supabase.php';
+require_once dirname(__DIR__, 2) . '/auth_guard.php';
+require_once dirname(__DIR__, 2) . '/config/supabase.php';
 
 $viewerToken = $_SESSION['access_token'] ?? '';
 if ($viewerToken === '') {

@@ -1,9 +1,3 @@
-<?php
-declare(strict_types=1);
-
-use Club61\Support\FeedFormatting;
-
-?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>

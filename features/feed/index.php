@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 
 
-require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
@@ -243,7 +243,7 @@ $feedOlderUrl = '/features/feed/index.php?page=' . ($feedPage + 1);
 $is_admin = isCurrentUserAdmin();
 
 ob_start();
-require __DIR__ . '/../../resources/views/feed/index.php';
+require __DIR__ . '/feed_view.php';
 $feedHtml = (string) ob_get_clean();
 $infiniteJs = <<<HTML
 <script>

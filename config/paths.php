@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 /**
- * Raiz do projeto: DOCUMENT_ROOT em HTTP, ou pasta pai de config/ em CLI.
+ * Raiz do site: $_SERVER['DOCUMENT_ROOT'] em HTTP; em CLI usa a pasta do projeto (pai de config/).
  */
 if (!defined('CLUB61_ROOT')) {
     $doc = isset($_SERVER['DOCUMENT_ROOT']) ? (string) $_SERVER['DOCUMENT_ROOT'] : '';

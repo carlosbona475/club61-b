@@ -1,6 +1,6 @@
 <?php
 
-require_once __DIR__ . '/config/bootstrap_path.php';
+require_once __DIR__ . '/config/paths.php';
 require_once CLUB61_ROOT . '/config/security_headers.php';
 require_once CLUB61_ROOT . '/config/session.php';
 require_once CLUB61_ROOT . '/config/auth_session.php';

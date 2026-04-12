@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 
 
-require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 /**
  * Depuração — desativado por defeito. Ative apenas em ambiente controlado:

@@ -206,7 +206,7 @@ a{color:inherit}
 <body>
 
 <header class="topnav">
-  <a class="topnav-brand" href="/feed">Club61</a>
+  <a class="topnav-brand" href="/features/feed/index.php">Club61</a>
   <div class="topnav-right">
     <span class="topnav-count"><?= (int) $membros_ativos ?> membros</span>
     <a class="feed-loc-nav-btn js-feed-loc" href="/features/location/index.php" title="Locais" aria-label="Descobrir locais próximos">
@@ -217,7 +217,7 @@ a{color:inherit}
         <path d="M12 2v2M12 20v2M2 12h2M20 12h2" opacity="0.6"/>
       </svg>
     </a>
-    <a class="topnav-profile" href="/profile" title="Perfil" aria-label="Perfil">👤</a>
+    <a class="topnav-profile" href="/features/profile/index.php" title="Perfil" aria-label="Perfil">👤</a>
   </div>
 </header>
 

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-use Club61\Core\Application;
-use Club61\Core\Container;
-
+/**
+ * Autoload Composer (tests / scripts). Pedidos HTTP usam PHP direto em features/.
+ */
 if (!defined('CLUB61_BASE_PATH')) {
     define('CLUB61_BASE_PATH', dirname(__DIR__));
 }
@@ -38,8 +38,3 @@ if (is_file($composerAutoload)) {
         }
     });
 }
-
-$container = new Container();
-Application::init($container);
-Application::registerBindings($container);
-

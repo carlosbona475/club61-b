@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Comentário async — insere em post_comments e devolve HTML escapado + JSON.
  * POST: post_id, comment, csrf — rate limit 1 / 3s por sessão.
@@ -6,11 +7,13 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
 header('Content-Type: application/json; charset=utf-8');
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

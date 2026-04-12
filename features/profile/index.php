@@ -1,8 +1,14 @@
 <?php
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 /**
  * Rótulo em PT para exibição (valor salvo em minúsculas).
@@ -22,10 +28,10 @@ function club61_relationship_label(string $stored): string
 
     return $map[$k] ?? $stored;
 }
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/profile_stats.php';
-require_once dirname(__DIR__, 2) . '/config/message_requests.php';
-require_once dirname(__DIR__, 2) . '/config/followers.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/profile_stats.php';
+require_once CLUB61_ROOT . '/config/message_requests.php';
+require_once CLUB61_ROOT . '/config/followers.php';
 
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
@@ -1030,6 +1036,7 @@ $igShowRel = trim($profileRelationship) !== '';
                 <div class="profile-id"><?php echo htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8'); ?></div>
 
                 <?php
+
                 $tiposValidos = ['Homem', 'Mulher', 'Casal'];
                 $tipoSelecionado = in_array($profileTipo, $tiposValidos, true) ? $profileTipo : '';
                 ?>
@@ -1078,6 +1085,7 @@ $igShowRel = trim($profileRelationship) !== '';
                         <div class="posts-grid">
                             <?php foreach ($myPostsForGrid as $gp): ?>
                                 <?php
+
                                 $gimg = trim((string) $gp['image_url']);
                                 ?>
                             <button type="button" class="posts-grid-cell" data-src="<?php echo htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8'); ?>" aria-label="Ampliar publicação">

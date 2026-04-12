@@ -1,11 +1,17 @@
 <?php
-require_once dirname(__DIR__, 2) . '/config/security_headers.php';
-require_once dirname(__DIR__, 2) . '/config/session.php';
-require_once dirname(__DIR__, 2) . '/config/rate_limit.php';
-require_once dirname(__DIR__, 2) . '/config/validation.php';
-require_once dirname(__DIR__, 2) . '/services/auth_service.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/config/security_headers.php';
+require_once CLUB61_ROOT . '/config/session.php';
+require_once CLUB61_ROOT . '/config/rate_limit.php';
+require_once CLUB61_ROOT . '/config/validation.php';
+require_once CLUB61_ROOT . '/services/auth_service.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
 
 club61_security_headers();
 club61_session_start_safe();

@@ -1,8 +1,14 @@
 <?php
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 $access_token = $_SESSION['access_token'] ?? '';
 $current_user_id = $_SESSION['user_id'] ?? null;
@@ -525,6 +531,7 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             <div class="posts-grid">
                 <?php foreach ($postsWithImage as $gp): ?>
                     <?php
+
                     $gpid = (int) ($gp['id'] ?? 0);
                     $gimg = trim((string) ($gp['image_url'] ?? ''));
                     $gcaption = isset($gp['caption']) ? (string) $gp['caption'] : '';

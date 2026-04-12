@@ -2,8 +2,12 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/config/security_headers.php';
-require_once dirname(__DIR__, 2) . '/config/session.php';
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/config/security_headers.php';
+require_once CLUB61_ROOT . '/config/session.php';
 
 club61_security_headers();
 club61_session_start_safe();

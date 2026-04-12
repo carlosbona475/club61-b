@@ -1,8 +1,14 @@
 <?php
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
-require_once dirname(__DIR__, 2) . '/config/online.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/online.php';
 
 $current_user_id = trim((string) ($_SESSION['user_id'] ?? ''));
 $access_token = trim((string) ($_SESSION['access_token'] ?? ''));
@@ -12,7 +18,7 @@ if ($current_user_id === '' || $access_token === '' || !defined('SUPABASE_SERVIC
     exit;
 }
 
-require_once dirname(__DIR__, 2) . '/config/city_rooms.php';
+require_once CLUB61_ROOT . '/config/city_rooms.php';
 
 $sala = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

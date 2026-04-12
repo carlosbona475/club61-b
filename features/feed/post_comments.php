@@ -1,13 +1,15 @@
 <?php
+
 /**
  * Lista todos os comentários de um post (escape XSS).
  */
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/feed_interactions.php';
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
 
 $postId = isset($_GET['post_id']) ? (int) $_GET['post_id'] : 0;
 if ($postId <= 0 || !feed_post_exists($postId)) {
@@ -54,6 +56,7 @@ h1{font-size:1rem;color:#C9A84C;margin-bottom:16px}
 <?php else: ?>
   <?php foreach ($comments as $c): ?>
     <?php
+
     $uid = isset($c['user_id']) ? (string) $c['user_id'] : '';
     $pr = $profiles[$uid] ?? [];
     $disp = isset($pr['display_id']) ? trim((string) $pr['display_id']) : '';

@@ -2,11 +2,15 @@
 
 declare(strict_types=1);
 
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
 /**
  * Depuração — desativado por defeito. Ative apenas em ambiente controlado:
  *   CLUB61_DEBUG=1 no .env / ambiente do servidor
  */
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
 
 $debugOn = getenv('CLUB61_DEBUG') === '1' || (isset($_ENV['CLUB61_DEBUG']) && $_ENV['CLUB61_DEBUG'] === '1');
 if (!$debugOn) {
@@ -14,12 +18,12 @@ if (!$debugOn) {
     exit;
 }
 
-require_once dirname(__DIR__, 2) . '/config/security_headers.php';
-require_once dirname(__DIR__, 2) . '/config/session.php';
+require_once CLUB61_ROOT . '/config/security_headers.php';
+require_once CLUB61_ROOT . '/config/session.php';
 club61_security_headers();
 club61_session_start_safe();
 
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 if (empty($_SESSION['access_token']) || empty($_SESSION['user_id'])) {
     echo 'SESSÃO VAZIA - faça login primeiro';

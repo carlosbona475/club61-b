@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/upload_validate.php';
-require_once dirname(__DIR__, 2) . '/config/post_input.php';
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/upload_validate.php';
+require_once CLUB61_ROOT . '/config/post_input.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /features/feed/index.php');

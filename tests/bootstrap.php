@@ -6,6 +6,9 @@ $root = dirname(__DIR__);
 if (!defined('CLUB61_BASE_PATH')) {
     define('CLUB61_BASE_PATH', $root);
 }
+if (!defined('CLUB61_ROOT')) {
+    define('CLUB61_ROOT', $root);
+}
 
 require_once $root . '/config/session.php';
 require_once $root . '/config/sanitize.php';

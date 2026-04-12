@@ -1,15 +1,17 @@
 <?php
+
 /**
  * Pedidos de mensagem recebidos (pending).
  */
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/feed_interactions.php';
-require_once dirname(__DIR__, 2) . '/config/message_requests.php';
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/message_requests.php';
 
 $uid = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($uid === '' || !mr_service_available()) {
@@ -88,6 +90,7 @@ h1{font-size:1.1rem;font-weight:700;color:#C9A84C}
 <?php else: ?>
   <?php foreach ($pending as $r): ?>
     <?php
+
     $fid = isset($r['from_user']) ? (string) $r['from_user'] : '';
     $pr = $profiles[$fid] ?? [];
     $label = isset($pr['display_id']) && trim((string) $pr['display_id']) !== ''

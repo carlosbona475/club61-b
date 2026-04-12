@@ -1,9 +1,15 @@
 <?php
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
 
 if (!isCurrentUserAdmin()) {
     header('Location: /features/profile/index.php?status=error&message=' . urlencode('Acesso negado'));

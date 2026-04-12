@@ -2,9 +2,13 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/city_rooms.php';
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/city_rooms.php';
 
 $rooms = club61_city_rooms();
 ?>
@@ -54,7 +58,7 @@ body{
 </head>
 <body>
 <div class="header">
-  <a href="/feed">&#8592;</a>
+  <a href="/features/feed/index.php">&#8592;</a>
   <h1>Salas de Chat</h1>
 </div>
 <div class="grid">
@@ -70,7 +74,7 @@ body{
 <?php endforeach; ?>
 </div>
 <nav class="bottomnav" aria-label="Navegação">
-  <a href="/feed"><span>🏠</span>Feed</a>
+  <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
   <a href="/features/profile/upload_story.php"><span>📷</span>Story</a>
   <a class="active" href="/features/chat/salas.php"><span>🏙️</span>Salas</a>
   <a href="/features/profile/index.php"><span>👤</span>Perfil</a>

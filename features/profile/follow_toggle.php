@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Toggle seguir / deixar de seguir (JSON).
  * POST: following_id (uuid), csrf
@@ -6,12 +7,14 @@
 
 declare(strict_types=1);
 
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
 header('Content-Type: application/json; charset=utf-8');
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/followers.php';
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/followers.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);

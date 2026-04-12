@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/geo.php';
-require_once dirname(__DIR__, 2) . '/config/followers.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/online.php';
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/geo.php';
+require_once CLUB61_ROOT . '/config/followers.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/online.php';
 
 $me = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($me === '') {
@@ -406,6 +410,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
                         <div class="nearby-list">
                             <?php foreach ($nearby as $item): ?>
                                 <?php
+
                                 $r = $item['row'];
                                 $km = $item['km'];
                                 $uid = isset($r['id']) ? (string) $r['id'] : '';

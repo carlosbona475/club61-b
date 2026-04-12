@@ -1,3 +1,9 @@
 <?php
 
-require_once dirname(__DIR__, 2) . '/services/auth_service.php';
+
+
+declare(strict_types=1);
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/services/auth_service.php';

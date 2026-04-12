@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Painel Admin — Club61
  *
@@ -9,10 +10,12 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/session.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/session.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 // Service role obrigatória para ler perfil e operações admin
 if (!defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
@@ -769,6 +772,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
                 <tbody>
                 <?php foreach ($members as $mem): ?>
                     <?php
+
                     $mid = isset($mem['id']) ? (string) $mem['id'] : '';
                     $lbl = clLabel($mem);
                     $un = isset($mem['username']) ? trim((string) $mem['username']) : '';
@@ -865,6 +869,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
             </table>
         </div>
         <?php
+
         if ($totalMembersPages > 1) {
             $prevM = max(1, $mPage - 1);
             $nextM = min($totalMembersPages, $mPage + 1);
@@ -881,6 +886,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
                 </span>
             </div>
             <?php
+
         }
         ?>
     </section>
@@ -901,6 +907,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
                 <tbody>
                 <?php foreach ($posts as $post): ?>
                     <?php
+
                     $pid = isset($post['id']) ? (string) $post['id'] : '';
                     $uid = isset($post['user_id']) ? (string) $post['user_id'] : '';
                     $author = $uid !== '' && isset($memberMap[$uid]) ? $memberMap[$uid] : [];
@@ -948,6 +955,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
             </table>
         </div>
         <?php
+
         if ($totalPostsPages > 1) {
             $prevP = max(1, $pPage - 1);
             $nextP = min($totalPostsPages, $pPage + 1);
@@ -964,6 +972,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
                 </span>
             </div>
             <?php
+
         }
         ?>
     </section>
@@ -982,6 +991,7 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
             <div class="invite-grid">
                 <?php foreach ($invites as $inv): ?>
                     <?php
+
                     $ic = isset($inv['code']) ? (string) $inv['code'] : '';
                     $st = isset($inv['status']) ? (string) $inv['status'] : '';
                     ?>

@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Aceitar ou rejeitar pedido de mensagem (receiver).
  * POST: request_id, action=accept|reject, csrf
@@ -6,10 +7,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
-require_once dirname(__DIR__, 2) . '/config/message_requests.php';
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/message_requests.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /features/chat/message_requests_inbox.php');

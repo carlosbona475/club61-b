@@ -1,12 +1,16 @@
 <?php
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/profile_helper.php';
-require_once dirname(__DIR__, 2) . '/config/feed_interactions.php';
-require_once dirname(__DIR__, 2) . '/config/online.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
+
+
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/online.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
 
 $onlineUsers = [];
 

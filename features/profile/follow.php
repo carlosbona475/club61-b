@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Form legado — redireciona; o fluxo principal é follow_toggle.php (AJAX).
  * Mantém POST followed_id para compatibilidade (usa coluna following_id na API).
@@ -6,9 +7,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__, 2) . '/auth_guard.php';
-require_once dirname(__DIR__, 2) . '/config/supabase.php';
-require_once dirname(__DIR__, 2) . '/config/csrf.php';
+require_once dirname(__DIR__, 2) . '/config/bootstrap_path.php';
+
+require_once CLUB61_ROOT . '/auth_guard.php';
+require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /features/profile/index.php');

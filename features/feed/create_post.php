@@ -2,6 +2,39 @@
 
 declare(strict_types=1);
 
+// TEMPORARY PRODUCTION DEBUG — PHP requires declare(strict_types=1) first; remove this whole block after verification.
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
+
+echo "<pre style='background:black;color:lime;padding:20px'>";
+echo "DEBUG: CREATE_POST.PHP IS EXECUTING\n\n";
+
+echo "FILE PATH:\n";
+echo __FILE__ . "\n\n";
+
+echo "SESSION DATA:\n";
+print_r($_SESSION);
+
+$token = $_SESSION['access_token'] ?? null;
+
+echo "\nTOKEN VALUE:\n";
+var_dump($token);
+
+if (!$token) {
+    echo "\nERROR: TOKEN NOT FOUND\n";
+    exit;
+}
+
+if (substr_count($token, '.') !== 2) {
+    echo "\nERROR: INVALID JWT FORMAT\n";
+    exit;
+}
+
+echo "\nJWT FORMAT OK\n";
+echo "</pre>";
+exit;
+
 require_once dirname(__DIR__, 2) . '/config/session.php';
 club61_session_bootstrap();
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -58,30 +91,6 @@ if ($binary === false) {
     header('Location: /features/feed/index.php?status=error&message=' . urlencode('Falha ao ler a imagem.'));
     exit;
 }
-
-// TEMPORARY DEBUG: remove after validating JWT / Supabase Storage (runs before any cURL).
-echo "<pre>";
-echo "SESSION DATA:\n";
-print_r($_SESSION);
-
-$token = $_SESSION['access_token'] ?? null;
-
-echo "\nTOKEN:\n";
-var_dump($token);
-
-if (!$token) {
-    echo "\nERROR: access_token not found\n";
-    exit;
-}
-
-if (substr_count($token, '.') !== 2) {
-    echo "\nERROR: Invalid JWT format\n";
-    exit;
-}
-
-echo "\nJWT FORMAT OK\n";
-echo "</pre>";
-exit;
 
 $storageUrl = SUPABASE_URL . '/storage/v1/object/posts/' . $filename;
 $storageCh = curl_init($storageUrl);

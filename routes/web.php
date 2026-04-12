@@ -54,6 +54,7 @@ return [
         'GET /features/profile/index.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'profileIndex']],
         'GET /features/chat/general.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
         'POST /features/chat/general.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatGeneral']],
+
         'GET /chat/salas' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatSalas']],
         'GET /features/chat/salas.php' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatSalas']],
         'GET /chat/inbox' => ['middleware' => 'auth', 'action' => [LegacyController::class, 'chatInbox']],

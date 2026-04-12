@@ -9,38 +9,35 @@ use Club61\Core\Request;
 final class LegacyController
 {
     public function feedLoadMore(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/feed/load_more.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/feed/load_more.php'; }
 
     public function feedCreatePost(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/feed/create_post.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/feed/create_post.php'; }
 
     public function feedToggleLike(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/feed/toggle_like.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/feed/toggle_like.php'; }
 
     public function feedAddComment(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/feed/add_comment.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/feed/add_comment.php'; }
 
     public function profileIndex(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/profile/index.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/profile/index.php'; }
 
     public function chatGeneral(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/chat/general.php';
-    }
+    { require \CLUB61_BASE_PATH . '/features/chat/general.php'; }
 
     public function chatSalas(Request $request): void
-    {
-        require \CLUB61_BASE_PATH . '/features/chat/salas.php';
-    }
-}
+    { require \CLUB61_BASE_PATH . '/features/chat/salas.php'; }
 
+    public function chatInbox(Request $request): void
+    { require \CLUB61_BASE_PATH . '/features/chat/inbox.php'; }
+
+    public function chatDm(Request $request): void
+    { require \CLUB61_BASE_PATH . '/features/chat/dm.php'; }
+
+    public function exploreNearby(Request $request): void
+    { require \CLUB61_BASE_PATH . '/features/explore/nearby.php'; }
+
+    public function storiesView(Request $request): void
+    { require \CLUB61_BASE_PATH . '/features/stories/view.php'; }
+}

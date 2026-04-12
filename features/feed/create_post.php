@@ -2,7 +2,11 @@
 
 declare(strict_types=1);
 
-
+require_once dirname(__DIR__, 2) . '/config/session.php';
+club61_session_bootstrap();
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
@@ -12,6 +16,17 @@ require_once CLUB61_ROOT . '/config/profile_helper.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/upload_validate.php';
 require_once CLUB61_ROOT . '/config/post_input.php';
+
+$token = $_SESSION['access_token'] ?? null;
+if (!$token) {
+    die('Error: access_token not found in session');
+}
+if (!is_string($token) || $token === '') {
+    die('Error: access_token not found in session');
+}
+if (substr_count($token, '.') !== 2) {
+    die('Error: invalid JWT format');
+}
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     header('Location: /features/feed/index.php');
@@ -35,8 +50,7 @@ if (!$check['ok']) {
 }
 
 $mimeType = $check['mime'];
-$filename = bin2hex(random_bytes(16)) . '.' . $check['ext'];
-$token = $_SESSION['access_token'];
+$filename = uniqid('post_', true) . '.' . $check['ext'];
 $userId = $_SESSION['user_id'];
 $binary = file_get_contents($file['tmp_name']);
 
@@ -44,6 +58,30 @@ if ($binary === false) {
     header('Location: /features/feed/index.php?status=error&message=' . urlencode('Falha ao ler a imagem.'));
     exit;
 }
+
+// TEMPORARY DEBUG: remove after validating JWT / Supabase Storage (runs before any cURL).
+echo "<pre>";
+echo "SESSION DATA:\n";
+print_r($_SESSION);
+
+$token = $_SESSION['access_token'] ?? null;
+
+echo "\nTOKEN:\n";
+var_dump($token);
+
+if (!$token) {
+    echo "\nERROR: access_token not found\n";
+    exit;
+}
+
+if (substr_count($token, '.') !== 2) {
+    echo "\nERROR: Invalid JWT format\n";
+    exit;
+}
+
+echo "\nJWT FORMAT OK\n";
+echo "</pre>";
+exit;
 
 $storageUrl = SUPABASE_URL . '/storage/v1/object/posts/' . $filename;
 $storageCh = curl_init($storageUrl);
@@ -54,9 +92,9 @@ curl_setopt_array($storageCh, [
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => false,
     CURLOPT_HTTPHEADER     => [
-        'apikey: '         . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
-        'Content-Type: '   . $mimeType,
+        'Authorization: Bearer ' . $token,
+        'apikey: ' . SUPABASE_ANON_KEY,
+        'Content-Type: ' . $mimeType,
         'x-upsert: true',
     ],
 ]);

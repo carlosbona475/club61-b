@@ -244,18 +244,15 @@ function loginUser(string $email, string $password): array
             ];
         }
 
-        club61_session_start_safe();
-
-        $_SESSION['access_token'] = $token;
-        $_SESSION['user_id'] = $userId;
         $userRow = isset($data['user']) && is_array($data['user']) ? $data['user'] : [];
         $meta = isset($userRow['user_metadata']) && is_array($userRow['user_metadata']) ? $userRow['user_metadata'] : [];
-        $_SESSION['role'] = isset($meta['role']) ? (string) $meta['role'] : 'member';
+        $role = isset($meta['role']) ? (string) $meta['role'] : 'member';
 
         return [
             'success' => true,
-            'access_token' => $data['access_token'],
+            'access_token' => $token,
             'user_id' => $userId,
+            'role' => $role,
         ];
     }
 

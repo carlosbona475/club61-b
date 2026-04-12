@@ -56,10 +56,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
         } elseif ($error === '') {
             $login = loginUser($email, $password);
             if ($login['success']) {
+                if (!isset($login['access_token']) || !is_string($login['access_token']) || $login['access_token'] === '') {
+                    die('Login failed: access_token missing');
+                }
+                if (substr_count($login['access_token'], '.') !== 2) {
+                    die('Login failed: access_token is not a valid JWT');
+                }
+                if (!isset($login['user_id']) || $login['user_id'] === '') {
+                    die('Login failed: user id missing');
+                }
                 session_regenerate_id(true);
                 csrf_rotate();
                 $_SESSION['access_token'] = $login['access_token'];
-                $_SESSION['user_id'] = $login['user_id'];
+                $_SESSION['user_id'] = (string) $login['user_id'];
+                $_SESSION['role'] = isset($login['role']) && is_string($login['role']) ? $login['role'] : 'member';
                 require_once CLUB61_ROOT . '/config/profile_helper.php';
                 ensureUserProfile($_SESSION['user_id'], $email);
                 admin_invalidate_profile_cache();

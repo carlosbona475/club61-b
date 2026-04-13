@@ -9,7 +9,13 @@ require_once __DIR__ . '/admin_guard.php';
  */
 function supabase_service_role_available(): bool
 {
-    return defined('SUPABASE_SERVICE_KEY') && SUPABASE_SERVICE_KEY !== '';
+    if (!defined('SUPABASE_SERVICE_KEY')) {
+        return false;
+    }
+    $sk = (string) SUPABASE_SERVICE_KEY;
+
+    return function_exists('club61_supabase_jwt_role')
+        && club61_supabase_jwt_role($sk) === 'service_role';
 }
 
 /**

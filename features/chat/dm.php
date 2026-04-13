@@ -19,6 +19,9 @@ if ($current_user_id === '' || $access_token === '' || !defined('SUPABASE_SERVIC
 }
 
 $other_id = isset($_GET['with']) ? trim((string) $_GET['with']) : '';
+if ($other_id === '' && isset($_GET['to'])) {
+    $other_id = trim((string) $_GET['to']);
+}
 if ($other_id === '' || $other_id === $current_user_id) {
     header('Location: /features/chat/inbox.php');
     exit;

@@ -22,6 +22,8 @@ function club61_relationship_label(string $stored): string
         'casal' => 'Casal',
         'casado' => 'Casado',
         'casada' => 'Casada',
+        'namorando' => 'Namorando',
+        'prefiro_nao_dizer' => 'Prefiro não dizer',
         'single' => 'Solteiro(a)',
         'couple' => 'Casal',
     ];
@@ -55,9 +57,11 @@ $profilePartnerAge = null;
 $statPosts = 0;
 $statLikesRecv = 0;
 $statFollowersCount = 0;
+$statFollowingCount = 0;
 $isFollowingProfile = false;
 $mrBtn = 'hidden';
 $profileUsername = '';
+$displayName = '';
 $is_admin = false;
 
 $access_token = isset($_SESSION['access_token']) ? $_SESSION['access_token'] : '';
@@ -70,9 +74,9 @@ $is_own_profile = $current_user_id !== null && (string) $profile_user_id === (st
 
 if ($access_token !== '' && $profile_lookup_id !== '') {
     if ($is_own_profile) {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
     } else {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
     }
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -115,7 +119,7 @@ if (
     && (string) $profile_user_id === (string) $current_user_id
     && supabase_service_role_available()
 ) {
-    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
+    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
     $ch = curl_init($svcUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -134,7 +138,7 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age'] as $k) {
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age', 'display_name'] as $k) {
                 if (array_key_exists($k, $svc) && $svc[$k] !== null && trim((string) $svc[$k]) !== '') {
                     $profileRow[$k] = $svc[$k];
                 }
@@ -149,6 +153,9 @@ if (is_array($profileRow)) {
     }
     if (isset($profileRow['username'])) {
         $profileUsername = trim((string) $profileRow['username']);
+    }
+    if (isset($profileRow['display_name']) && $profileRow['display_name'] !== null) {
+        $displayName = trim((string) $profileRow['display_name']);
     }
     if (isset($profileRow['tipo'])) {
         $profileTipo = trim((string) $profileRow['tipo']);
@@ -194,7 +201,7 @@ if (
     && $profile_lookup_id !== ''
     && supabase_service_role_available()
 ) {
-    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profile_lookup_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age');
+    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profile_lookup_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
     $chO = curl_init($svcOtherUrl);
     curl_setopt($chO, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($chO, CURLOPT_SSL_VERIFYPEER, false);
@@ -213,7 +220,7 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age'] as $k) {
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age', 'display_name'] as $k) {
                 if (array_key_exists($k, $o) && $o[$k] !== null && trim((string) $o[$k]) !== '') {
                     $profileRow[$k] = $o[$k];
                 }
@@ -264,6 +271,7 @@ if ($profile_lookup_id !== '' && profile_stats_service_ok()) {
 
 if ($profile_lookup_id !== '' && followers_service_ok()) {
     $statFollowersCount = getFollowersCount($profile_lookup_id);
+    $statFollowingCount = getFollowingCount($profile_lookup_id);
 }
 
 if (
@@ -364,18 +372,8 @@ if ($is_admin && $access_token !== '' && $current_user_id !== null && $current_u
 $cidade = $profileCidade;
 
 $csrf = csrf_token();
-$bigHandle = $clLabel !== '' && $clLabel !== 'CL00' ? $clLabel : ($profileUsername !== '' ? '@' . $profileUsername : 'Membro');
+$bigHandle = $displayName !== '' ? $displayName : ($clLabel !== '' && $clLabel !== 'CL00' ? $clLabel : ($profileUsername !== '' ? '@' . $profileUsername : 'Membro'));
 $relLower = strtolower(trim($profileRelationship));
-$allowedRelForm = ['solteiro', 'solteira', 'casal', 'casado', 'casada'];
-$relSel = in_array($relLower, $allowedRelForm, true) ? $relLower : '';
-if ($relSel === '' && $relLower === 'single') {
-    $relSel = 'solteiro';
-}
-if ($relSel === '' && $relLower === 'couple') {
-    $relSel = 'casal';
-}
-$showPartnerAge = ($relSel === 'casal' || $relLower === 'couple');
-
 $igShowAge = $profileAge !== null;
 $igShowCity = trim($cidade) !== '';
 $igShowRel = trim($profileRelationship) !== '';
@@ -828,8 +826,8 @@ $igShowRel = trim($profileRelationship) !== '';
         }
         .ig-avatar-col { flex-shrink: 0; }
         .ig-avatar-img {
-            width: 96px;
-            height: 96px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
             object-fit: cover;
             border: 2px solid #333;
@@ -837,8 +835,8 @@ $igShowRel = trim($profileRelationship) !== '';
             background: #1A1A1A;
         }
         .ig-avatar-fallback {
-            width: 96px;
-            height: 96px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
             border: 2px solid #333;
             background: #1A1A1A;
@@ -849,13 +847,20 @@ $igShowRel = trim($profileRelationship) !== '';
             color: #7B2EFF;
         }
         .ig-main-col { flex: 1; min-width: 0; }
+        .ig-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
         .ig-username {
-            margin: 0 0 10px;
+            margin: 0;
             font-size: clamp(1.35rem, 4vw, 1.65rem);
             font-weight: 700;
             color: #fff;
             letter-spacing: 0.02em;
         }
+        .ig-gear {
+            color: #888; font-size: 1.35rem; text-decoration: none; line-height: 1;
+            padding: 4px;
+        }
+        .ig-gear:hover { color: #C9A84C; }
+        .ig-handle-sub { margin: 0 0 10px; font-size: 0.88rem; color: #777; }
         .ig-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; align-items: center; }
         .btn-ig-edit, .btn-ig-msg {
             display: inline-block;
@@ -878,9 +883,26 @@ $igShowRel = trim($profileRelationship) !== '';
             margin-bottom: 12px;
             justify-content: flex-start;
         }
+        a.ig-stat-link { text-decoration: none; color: inherit; cursor: pointer; }
+        a.ig-stat-link:hover .ig-stat-num { color: #C9A84C; }
         .ig-stat { text-align: center; min-width: 56px; }
         .ig-stat-num { font-weight: 700; font-size: 1rem; color: #fff; }
         .ig-stat-lbl { font-size: 0.62rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+        .btn-ig-story {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 7px 16px; font-size: 0.78rem; font-weight: 600; border-radius: 999px;
+            border: 1px solid #333; background: #161616; color: #e0e0e0; text-decoration: none; font-family: inherit;
+        }
+        .btn-ig-story:hover { border-color: #C9A84C; color: #C9A84C; }
+        .ig-avatar-link { display: block; border-radius: 50%; text-decoration: none; }
+        .ig-avatar-link:focus-visible { outline: 2px solid #7B2EFF; outline-offset: 3px; }
+        .btn-dm-icon {
+            display: inline-flex; align-items: center; justify-content: center;
+            width: 40px; height: 36px; border-radius: 8px; border: 1px solid #333;
+            background: #161616; color: #ccc; text-decoration: none;
+            transition: border-color 0.15s ease, color 0.15s ease;
+        }
+        .btn-dm-icon:hover { border-color: #C9A84C; color: #C9A84C; }
         .ig-meta-line { font-size: 0.88rem; color: #bbb; margin-bottom: 8px; }
         .ig-bio { font-size: 0.9rem; color: #ccc; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
         .perfil-location-row {
@@ -943,17 +965,34 @@ $igShowRel = trim($profileRelationship) !== '';
                 <h1 class="auth-brand">Perfil</h1>
                 <div class="ig-header">
                     <div class="ig-avatar-col">
+                        <?php if ($is_own_profile): ?>
+                        <a class="ig-avatar-link" href="/features/profile/upload_avatar.php?return_to=<?= rawurlencode('/features/profile/index.php') ?>" title="Alterar foto">
+                        <?php endif; ?>
                         <?php if ($avatarUrl !== ''): ?>
                         <img class="ig-avatar-img" src="<?= htmlspecialchars($avatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="">
                         <?php else: ?>
                         <div class="ig-avatar-fallback" aria-hidden="true">&#128100;</div>
                         <?php endif; ?>
+                        <?php if ($is_own_profile): ?>
+                        </a>
+                        <?php endif; ?>
                     </div>
                     <div class="ig-main-col">
-                        <h2 class="ig-username"><?= htmlspecialchars($bigHandle, ENT_QUOTES, 'UTF-8') ?></h2>
+                        <div class="ig-title-row">
+                            <h2 class="ig-username"><?= htmlspecialchars($bigHandle, ENT_QUOTES, 'UTF-8') ?></h2>
+                            <?php if ($is_own_profile): ?>
+                            <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($displayName !== '' && $clLabel !== '' && $clLabel !== 'CL00'): ?>
+                        <p class="ig-handle-sub"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?><?php if ($profileUsername !== ''): ?> · @<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?><?php endif; ?></p>
+                        <?php elseif ($profileUsername !== '' && !$is_own_profile): ?>
+                        <p class="ig-handle-sub">@<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?></p>
+                        <?php endif; ?>
                         <div class="ig-actions">
                             <?php if ($is_own_profile): ?>
-                            <a class="btn-ig-edit" href="#form-perfil">Editar perfil</a>
+                            <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
+                            <a class="btn-ig-story" href="/features/profile/upload_story.php"><i class="bi bi-camera" aria-hidden="true"></i> Enviar story</a>
                             <?php elseif (!$is_own_profile && $current_user_id !== null && $profile_lookup_id !== ''): ?>
                             <button type="button" id="profile-follow-btn" class="btn btn-follow dark-btn js-follow-toggle<?= $isFollowingProfile ? ' is-following' : '' ?>"
                                 data-following-id="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>"
@@ -961,8 +1000,13 @@ $igShowRel = trim($profileRelationship) !== '';
                                 aria-pressed="<?= $isFollowingProfile ? 'true' : 'false' ?>">
                                 <?= $isFollowingProfile ? 'Seguindo' : 'Seguir' ?>
                             </button>
-                            <?php endif; ?>
-                            <?php if (!$is_own_profile && $mrBtn !== 'hidden'): ?>
+                            <?php if ($mrBtn === 'accepted'): ?>
+                            <a class="btn-dm-icon" href="/features/chat/dm.php?to=<?= rawurlencode((string) $profile_lookup_id) ?>" title="Mensagem" aria-label="Mensagem privada">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                                    <path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4l-4 3V7a2 2 0 012-2z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
+                                </svg>
+                            </a>
+                            <?php elseif ($mrBtn !== 'hidden'): ?>
                                 <?php if ($mrBtn === 'request'): ?>
                                 <form action="/features/profile/message_request.php" method="post" style="display:inline">
                                     <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
@@ -974,25 +1018,33 @@ $igShowRel = trim($profileRelationship) !== '';
                                 <span class="btn-ig-msg btn-ig-msg--muted" title="Aguardando resposta">Pedido enviado</span>
                                 <?php elseif ($mrBtn === 'pending_inbox'): ?>
                                 <a class="btn-ig-msg" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
-                                <?php elseif ($mrBtn === 'accepted'): ?>
-                                <a class="btn-ig-msg" href="/features/chat/dm.php?with=<?= rawurlencode((string) $profile_lookup_id) ?>">Mensagem</a>
                                 <?php endif; ?>
+                            <?php endif; ?>
                             <?php endif; ?>
                         </div>
                         <div class="ig-stats" aria-label="Estatísticas">
+                            <a class="ig-stat-link" href="#profile-posts-grid">
                             <div class="ig-stat">
                                 <div class="ig-stat-num"><?= (int) $statPosts ?></div>
                                 <div class="ig-stat-lbl">Posts</div>
                             </div>
-                            <div class="ig-stat">
-                                <div class="ig-stat-num"><?= (int) $statLikesRecv ?></div>
-                                <div class="ig-stat-lbl">Curtidas</div>
-                            </div>
+                            </a>
+                            <a class="ig-stat-link" href="#profile-network-stub">
                             <div class="ig-stat">
                                 <div class="ig-stat-num" id="profile-followers-count" data-followers-count="<?= (int) $statFollowersCount ?>"><?= (int) $statFollowersCount ?></div>
                                 <div class="ig-stat-lbl">Seguidores</div>
                             </div>
+                            </a>
+                            <a class="ig-stat-link" href="#profile-network-stub">
+                            <div class="ig-stat">
+                                <div class="ig-stat-num"><?= (int) $statFollowingCount ?></div>
+                                <div class="ig-stat-lbl">Seguindo</div>
+                            </div>
+                            </a>
                         </div>
+                        <?php if ($profileBio !== ''): ?>
+                        <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
+                        <?php endif; ?>
                         <?php if ($igShowAge || $igShowCity || $igShowRel): ?>
                         <p class="ig-meta-line">
                             <?php if ($igShowAge): ?><?= (int) $profileAge ?> anos<?php endif; ?>
@@ -1005,9 +1057,6 @@ $igShowRel = trim($profileRelationship) !== '';
                                 <?= htmlspecialchars(club61_relationship_label($profileRelationship), ENT_QUOTES, 'UTF-8') ?>
                             <?php endif; ?>
                         </p>
-                        <?php endif; ?>
-                        <?php if ($profileBio !== ''): ?>
-                        <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
                         <?php endif; ?>
                     </div>
                 </div>
@@ -1024,60 +1073,13 @@ $igShowRel = trim($profileRelationship) !== '';
                 </p>
                 <?php endif; ?>
                 <p class="auth-sub">Identificador do membro neste espaço.</p>
-                <?php if ((string) $profile_user_id === (string) $current_user_id && $current_user_id !== null): ?>
-                <div class="avatar-stack" style="margin-bottom:12px">
-                <form class="avatar-upload-form" action="upload_avatar.php" method="post" enctype="multipart/form-data">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <input type="file" class="avatar-file-input" name="avatar" id="avatar-file-input" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp" onchange="this.form.submit()">
-                    <button type="button" class="btn-alterar-foto" onclick="document.getElementById('avatar-file-input').click();">Alterar foto</button>
-                </form>
-                </div>
-                <?php endif; ?>
                 <div class="profile-id"><?php echo htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8'); ?></div>
-
-                <?php
-
-                $tiposValidos = ['Homem', 'Mulher', 'Casal'];
-                $tipoSelecionado = in_array($profileTipo, $tiposValidos, true) ? $profileTipo : '';
-                ?>
-                <?php if ((string) $profile_user_id === (string) $current_user_id && $current_user_id !== null): ?>
-                <form id="form-perfil" class="form-perfil" action="update_profile.php" method="post" autocomplete="on">
-                    <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                    <label for="perfil-bio">Bio</label>
-                    <textarea id="perfil-bio" name="bio" rows="3" maxlength="2000" placeholder="Uma linha sobre você"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></textarea>
-                    <label for="perfil-age">Idade</label>
-                    <input id="perfil-age" type="number" name="age" min="18" max="120" placeholder="Ex.: 32" value="<?= $profileAge !== null ? (int) $profileAge : '' ?>">
-                    <label for="perfil-rel">Relacionamento</label>
-                    <select id="perfil-rel" name="relationship_type" required>
-                        <option value="" disabled<?= $relSel === '' ? ' selected' : '' ?>>Selecione…</option>
-                        <option value="solteiro"<?= $relSel === 'solteiro' ? ' selected' : '' ?>>Solteiro</option>
-                        <option value="solteira"<?= $relSel === 'solteira' ? ' selected' : '' ?>>Solteira</option>
-                        <option value="casal"<?= $relSel === 'casal' ? ' selected' : '' ?>>Casal</option>
-                        <option value="casado"<?= $relSel === 'casado' ? ' selected' : '' ?>>Casado</option>
-                        <option value="casada"<?= $relSel === 'casada' ? ' selected' : '' ?>>Casada</option>
-                    </select>
-                    <div id="partner-age-wrap" class="<?= $showPartnerAge ? 'is-on' : '' ?>">
-                        <label for="perfil-partner-age">Idade do(a) parceiro(a)</label>
-                        <input id="perfil-partner-age" type="number" name="partner_age" min="18" max="120" placeholder="Ex.: 30" value="<?= $profilePartnerAge !== null ? (int) $profilePartnerAge : '' ?>">
-                    </div>
-                    <label for="perfil-tipo">Tipo</label>
-                    <select id="perfil-tipo" name="tipo" required>
-                        <option value="" disabled<?php echo $tipoSelecionado === '' ? ' selected' : ''; ?>>Selecione…</option>
-                        <option value="Homem"<?php echo $tipoSelecionado === 'Homem' ? ' selected' : ''; ?>>Homem</option>
-                        <option value="Mulher"<?php echo $tipoSelecionado === 'Mulher' ? ' selected' : ''; ?>>Mulher</option>
-                        <option value="Casal"<?php echo $tipoSelecionado === 'Casal' ? ' selected' : ''; ?>>Casal</option>
-                    </select>
-                    <label for="perfil-cidade">Cidade</label>
-                    <input id="perfil-cidade" type="text" name="cidade" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Sua cidade" maxlength="120">
-                    <div class="perfil-location-row">
-                        <button type="button" class="btn-ig-edit" id="btn-usar-localizacao">Usar minha localização</button>
-                        <span id="location-save-status" class="location-save-status" aria-live="polite"></span>
-                    </div>
-                    <button class="btn-salvar-perfil" type="submit">Salvar</button>
-                </form>
+                <?php if ($is_own_profile): ?>
+                <p style="text-align:center;margin-top:12px"><a class="btn-ig-edit" href="/features/profile/settings.php">Editar dados e localização em Configurações</a></p>
                 <?php endif; ?>
 
-                <div class="posts-section">
+                <div id="profile-network-stub" tabindex="-1" style="scroll-margin-top:72px"></div>
+                <div class="posts-section" id="profile-posts-grid">
                     <h2 class="section-head">Publicações</h2>
                     <?php if (empty($myPostsForGrid)): ?>
                         <p class="posts-empty">Nenhuma publicação ainda.</p>
@@ -1162,57 +1164,6 @@ $igShowRel = trim($profileRelationship) !== '';
                     .catch(function () {})
                     .finally(function () { followBtn.disabled = false; });
             });
-        }
-        var rel = document.getElementById('perfil-rel');
-        var pw = document.getElementById('partner-age-wrap');
-        function syncPartner() {
-            if (!rel || !pw) return;
-            pw.classList.toggle('is-on', rel.value === 'casal');
-        }
-        if (rel) {
-            rel.addEventListener('change', syncPartner);
-            syncPartner();
-        }
-        var btnLoc = document.getElementById('btn-usar-localizacao');
-        var locStatus = document.getElementById('location-save-status');
-        if (btnLoc) {
-            if (!navigator.geolocation) {
-                btnLoc.disabled = true;
-                if (locStatus) locStatus.textContent = 'Geolocalização não suportada neste navegador.';
-            } else {
-                btnLoc.addEventListener('click', function () {
-                    if (locStatus) locStatus.textContent = 'A obter localização…';
-                    btnLoc.disabled = true;
-                    navigator.geolocation.getCurrentPosition(
-                        function (pos) {
-                            var fd = new FormData();
-                            fd.append('latitude', String(pos.coords.latitude));
-                            fd.append('longitude', String(pos.coords.longitude));
-                            fd.append('csrf', PROFILE_CSRF);
-                            fetch('/features/profile/save_location.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-                                .then(function (r) { return r.json(); })
-                                .then(function (d) {
-                                    if (d.csrf) PROFILE_CSRF = d.csrf;
-                                    if (d.ok) {
-                                        if (locStatus) locStatus.textContent = 'Localização guardada.';
-                                        try { localStorage.setItem('club61_location_updated_at', String(Date.now())); } catch (e) {}
-                                    } else {
-                                        if (locStatus) locStatus.textContent = (d.error === 'rate_limit') ? 'Aguarde um momento.' : 'Não foi possível guardar.';
-                                    }
-                                })
-                                .catch(function () {
-                                    if (locStatus) locStatus.textContent = 'Erro de rede.';
-                                })
-                                .finally(function () { btnLoc.disabled = false; });
-                        },
-                        function () {
-                            if (locStatus) locStatus.textContent = 'Permissão negada ou localização indisponível.';
-                            btnLoc.disabled = false;
-                        },
-                        { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
-                    );
-                });
-            }
         }
         var modal = document.getElementById('postModal');
         var modalImg = document.getElementById('postModalImg');

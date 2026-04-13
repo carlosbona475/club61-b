@@ -7,7 +7,12 @@ require_once __DIR__ . '/feed_interactions.php';
 
 function profile_stats_service_ok(): bool
 {
-    return defined('SUPABASE_URL') && defined('SUPABASE_SERVICE_KEY') && SUPABASE_SERVICE_KEY !== '';
+    if (!defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+        return false;
+    }
+
+    return function_exists('club61_supabase_jwt_role')
+        && club61_supabase_jwt_role((string) SUPABASE_SERVICE_KEY) === 'service_role';
 }
 
 function profile_count_posts(string $userId): int

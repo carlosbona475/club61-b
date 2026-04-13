@@ -1,7 +1,4 @@
 <?php
-
-
-
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';
@@ -9,6 +6,27 @@ require_once dirname(__DIR__, 2) . '/config/paths.php';
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/followers.php';
+require_once CLUB61_ROOT . '/config/message_requests.php';
+
+function club61_view_rel_label(string $stored): string
+{
+    $k = strtolower(trim($stored));
+    $map = [
+        'solteiro' => 'Solteiro',
+        'solteira' => 'Solteira',
+        'casal' => 'Casal',
+        'casado' => 'Casado',
+        'casada' => 'Casada',
+        'namorando' => 'Namorando',
+        'prefiro_nao_dizer' => 'Prefiro não dizer',
+        'single' => 'Solteiro(a)',
+        'couple' => 'Casal',
+    ];
+
+    return $map[$k] ?? $stored;
+}
 
 $access_token = $_SESSION['access_token'] ?? '';
 $current_user_id = $_SESSION['user_id'] ?? null;
@@ -27,17 +45,26 @@ if ($view_user_id === '') {
     exit;
 }
 
+if ($current_user_id !== null && (string) $view_user_id === (string) $current_user_id) {
+    header('Location: /features/profile/index.php');
+    exit;
+}
+
 $profileRow = null;
 $avatarUrl = '';
 $profileTipo = '';
 $profileCidade = '';
+$profileBio = '';
+$profileUsername = '';
+$displayName = '';
+$profileRelationship = '';
 $clLabel = 'CL00';
 $posts = [];
 $likeCounts = [];
 $userLikedPostIds = [];
 
 if ($access_token !== '') {
-    $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade');
+    $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,display_name,relationship_type');
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -58,6 +85,38 @@ if ($access_token !== '') {
     }
 }
 
+if (
+    supabase_service_role_available()
+    && $view_user_id !== ''
+) {
+    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,display_name,relationship_type');
+    $chO = curl_init($svcOtherUrl);
+    curl_setopt($chO, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($chO, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($chO, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($chO, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+        'Accept: application/json',
+    ]));
+    curl_setopt($chO, CURLOPT_HTTPGET, true);
+    $svcOB = curl_exec($chO);
+    $svcOC = curl_getinfo($chO, CURLINFO_HTTP_CODE);
+    curl_close($chO);
+    if ($svcOB !== false && $svcOC >= 200 && $svcOC < 300) {
+        $svcORows = json_decode($svcOB, true);
+        if (is_array($svcORows) && !empty($svcORows[0])) {
+            $o = $svcORows[0];
+            if (!is_array($profileRow)) {
+                $profileRow = [];
+            }
+            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'display_name', 'relationship_type'] as $k) {
+                if (array_key_exists($k, $o) && $o[$k] !== null && trim((string) $o[$k]) !== '') {
+                    $profileRow[$k] = $o[$k];
+                }
+            }
+        }
+    }
+}
+
 if (is_array($profileRow)) {
     if (isset($profileRow['avatar_url'])) {
         $avatarUrl = trim((string) $profileRow['avatar_url']);
@@ -67,6 +126,18 @@ if (is_array($profileRow)) {
     }
     if (isset($profileRow['cidade'])) {
         $profileCidade = trim((string) $profileRow['cidade']);
+    }
+    if (isset($profileRow['bio']) && $profileRow['bio'] !== null) {
+        $profileBio = trim((string) $profileRow['bio']);
+    }
+    if (isset($profileRow['username'])) {
+        $profileUsername = trim((string) $profileRow['username']);
+    }
+    if (isset($profileRow['display_name']) && $profileRow['display_name'] !== null) {
+        $displayName = trim((string) $profileRow['display_name']);
+    }
+    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_type']);
     }
     $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
     if ($disp !== '') {
@@ -164,7 +235,19 @@ if ($access_token !== '' && $postIds !== []) {
 }
 
 $postsCount = count($postsWithImage);
-$is_own = $current_user_id !== null && (string) $view_user_id === (string) $current_user_id;
+$statFollowers = followers_service_ok() ? getFollowersCount($view_user_id) : 0;
+$statFollowing = followers_service_ok() ? getFollowingCount($view_user_id) : 0;
+$isFollowingProfile = false;
+if ($current_user_id !== null && followers_service_ok()) {
+    $isFollowingProfile = followers_is_following((string) $current_user_id, (string) $view_user_id);
+}
+$mrBtn = 'hidden';
+if ($current_user_id !== null) {
+    $mrBtn = mr_profile_button_state((string) $current_user_id, (string) $view_user_id);
+}
+
+$headline = $displayName !== '' ? $displayName : $clLabel;
+$csrf = csrf_token();
 $returnUrl = '/features/profile/view.php?id=' . rawurlencode($view_user_id);
 
 $flash_status = isset($_GET['status']) ? (string) $_GET['status'] : '';
@@ -219,7 +302,7 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             font-size: 0.9rem;
             font-weight: 500;
         }
-        .nav-links a:hover { color: #ccc; }
+        .nav-links a:hover { color: #C9A84C; }
         .page {
             max-width: 640px;
             margin: 0 auto;
@@ -229,19 +312,17 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             display: flex;
             flex-wrap: wrap;
             align-items: flex-start;
-            gap: 24px;
-            margin-bottom: 28px;
-            padding-bottom: 24px;
+            gap: 20px;
+            margin-bottom: 20px;
+            padding-bottom: 20px;
             border-bottom: 1px solid #222;
         }
-        .avatar-wrap {
-            flex-shrink: 0;
-        }
+        .avatar-wrap { flex-shrink: 0; }
         .avatar-ring {
-            width: 100px;
-            height: 100px;
+            width: 120px;
+            height: 120px;
             border-radius: 50%;
-            border: 3px solid #7B2EFF;
+            border: 3px solid #333;
             overflow: hidden;
             background: #1a1a1a;
             display: flex;
@@ -255,68 +336,84 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             display: block;
         }
         .avatar-fallback {
-            font-size: 2.5rem;
+            font-size: 2.75rem;
             color: #7B2EFF;
         }
-        .profile-meta {
-            flex: 1;
-            min-width: 200px;
-        }
+        .profile-meta { flex: 1; min-width: 0; }
+        .ig-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
         .profile-cl {
-            font-size: 1.35rem;
+            font-size: clamp(1.2rem, 4vw, 1.5rem);
             font-weight: 700;
-            letter-spacing: 0.06em;
-            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+            margin: 0;
             color: #fff;
         }
-        .profile-line {
-            font-size: 0.95rem;
-            color: #aaa;
-            margin-bottom: 4px;
-        }
-        .profile-line strong { color: #e0e0e0; font-weight: 600; }
-        .posts-stat {
-            font-size: 0.95rem;
-            color: #888;
-            margin-top: 12px;
-        }
-        .posts-stat span { color: #fff; font-weight: 600; }
-        .profile-actions {
+        .ig-handle-sub { margin: 0 0 10px; font-size: 0.88rem; color: #777; }
+        .ig-stats {
             display: flex;
+            gap: 16px;
+            margin: 12px 0 14px;
             flex-wrap: wrap;
-            gap: 10px;
-            margin-top: 16px;
         }
+        a.ig-stat-link { text-decoration: none; color: inherit; }
+        a.ig-stat-link:hover .ig-stat-num { color: #C9A84C; }
+        .ig-stat { text-align: center; min-width: 52px; }
+        .ig-stat-num { font-weight: 700; font-size: 1rem; color: #fff; }
+        .ig-stat-lbl { font-size: 0.62rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+        .profile-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 4px; }
         .btn-follow {
-            padding: 10px 22px;
+            padding: 8px 18px;
             border: none;
-            border-radius: 8px;
+            border-radius: 999px;
             background: #7B2EFF;
             color: #fff;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
             font-weight: 700;
             cursor: pointer;
-            text-decoration: none;
-            display: inline-block;
+            font-family: inherit;
         }
-        .btn-follow:hover { box-shadow: 0 0 18px rgba(123, 46, 255, 0.45); }
-        .btn-msg {
-            padding: 10px 22px;
-            border: 1px solid #333;
-            border-radius: 8px;
-            background: #1e1e1e;
-            color: #bbb;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            text-decoration: none;
+        .btn-follow.is-following {
+            background: #1a1a1a;
+            color: #b0b0b0;
+            border: 1px solid #444;
         }
-        .btn-msg:hover { background: #2a2a2a; color: #fff; }
-        .btn-msg-private {
+        .btn-follow:hover { filter: brightness(1.08); }
+        .btn-dm-icon {
             display: inline-flex;
             align-items: center;
-            margin-top: 12px;
+            justify-content: center;
+            width: 40px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            background: #161616;
+            color: #ccc;
+            text-decoration: none;
+            transition: border-color 0.15s ease, color 0.15s ease;
         }
+        .btn-dm-icon:hover { border-color: #C9A84C; color: #C9A84C; }
+        .btn-ig-msg {
+            display: inline-block;
+            padding: 7px 14px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border-radius: 999px;
+            border: 1px solid #333;
+            background: #161616;
+            color: #e0e0e0;
+            text-decoration: none;
+            font-family: inherit;
+        }
+        .btn-ig-msg--muted { opacity: 0.75; cursor: default; border-style: dashed; }
+        .ig-bio {
+            font-size: 0.92rem;
+            color: #ccc;
+            line-height: 1.45;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+        }
+        .ig-meta-line { font-size: 0.88rem; color: #888; margin-top: 8px; }
         .section-title {
             font-size: 0.72rem;
             font-weight: 700;
@@ -471,6 +568,8 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             border: 1px solid rgba(255, 107, 107, 0.3);
             color: #ff6b6b;
         }
+        #profile-network-stub { scroll-margin-top: 72px; }
+        #profile-posts-grid { scroll-margin-top: 72px; }
     </style>
 </head>
 <body>
@@ -500,31 +599,93 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
                 </div>
             </div>
             <div class="profile-meta">
-                <div class="profile-cl"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></div>
-                <?php if ($profileTipo !== ''): ?>
-                    <div class="profile-line">Tipo: <strong><?= htmlspecialchars($profileTipo, ENT_QUOTES, 'UTF-8') ?></strong></div>
-                <?php endif; ?>
-                <?php if ($profileCidade !== ''): ?>
-                    <div class="profile-line">Cidade: <strong><?= htmlspecialchars($profileCidade, ENT_QUOTES, 'UTF-8') ?></strong></div>
-                <?php endif; ?>
-                <div class="posts-stat"><span><?= (int) $postsCount ?></span> posts</div>
-                <?php if (!$is_own): ?>
-                <div class="profile-actions">
-                    <form action="/features/profile/follow.php" method="POST" style="display:inline">
-                        <input type="hidden" name="followed_id" value="<?= htmlspecialchars($view_user_id, ENT_QUOTES, 'UTF-8') ?>">
-                        <input type="hidden" name="return_to" value="<?= htmlspecialchars($returnUrl, ENT_QUOTES, 'UTF-8') ?>">
-                        <button type="submit" class="btn-follow">Seguir</button>
-                    </form>
+                <div class="ig-title-row">
+                    <h1 class="profile-cl"><?= htmlspecialchars($headline, ENT_QUOTES, 'UTF-8') ?></h1>
                 </div>
-                <a class="btn-msg btn-msg-private"
-                   href="/features/chat/dm.php?with=<?= urlencode($view_user_id) ?>">
-                  💬 Mensagem privada
-                </a>
+                <?php if ($displayName !== '' && $clLabel !== '' && $clLabel !== 'CL00'): ?>
+                <p class="ig-handle-sub"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?><?php if ($profileUsername !== ''): ?> · @<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?><?php endif; ?></p>
+                <?php elseif ($profileUsername !== ''): ?>
+                <p class="ig-handle-sub">@<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?></p>
+                <?php endif; ?>
+
+                <div class="ig-stats" aria-label="Estatísticas">
+                    <a class="ig-stat-link" href="#profile-posts-grid">
+                        <div class="ig-stat">
+                            <div class="ig-stat-num"><?= (int) $postsCount ?></div>
+                            <div class="ig-stat-lbl">Posts</div>
+                        </div>
+                    </a>
+                    <a class="ig-stat-link" href="#profile-network-stub">
+                        <div class="ig-stat">
+                            <div class="ig-stat-num" id="view-followers-count"><?= (int) $statFollowers ?></div>
+                            <div class="ig-stat-lbl">Seguidores</div>
+                        </div>
+                    </a>
+                    <a class="ig-stat-link" href="#profile-network-stub">
+                        <div class="ig-stat">
+                            <div class="ig-stat-num"><?= (int) $statFollowing ?></div>
+                            <div class="ig-stat-lbl">Seguindo</div>
+                        </div>
+                    </a>
+                </div>
+
+                <?php if ($profileBio !== ''): ?>
+                <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
+                <?php endif; ?>
+
+                <?php if ($current_user_id !== null && (string) $view_user_id !== (string) $current_user_id): ?>
+                <div class="profile-actions">
+                    <button type="button" id="view-follow-btn" class="btn-follow<?= $isFollowingProfile ? ' is-following' : '' ?>"
+                        data-following-id="<?= htmlspecialchars((string) $view_user_id, ENT_QUOTES, 'UTF-8') ?>"
+                        data-following="<?= $isFollowingProfile ? '1' : '0' ?>"
+                        aria-pressed="<?= $isFollowingProfile ? 'true' : 'false' ?>">
+                        <?= $isFollowingProfile ? 'Seguindo' : 'Seguir' ?>
+                    </button>
+                    <?php if ($mrBtn === 'accepted'): ?>
+                    <a class="btn-dm-icon" href="/features/chat/dm.php?to=<?= rawurlencode((string) $view_user_id) ?>" title="Mensagem" aria-label="Mensagem privada">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                            <path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4l-4 3V7a2 2 0 012-2z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
+                        </svg>
+                    </a>
+                    <?php elseif ($mrBtn !== 'hidden'): ?>
+                        <?php if ($mrBtn === 'request'): ?>
+                        <form action="/features/profile/message_request.php" method="post" style="display:inline">
+                            <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="to_user" value="<?= htmlspecialchars((string) $view_user_id, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="return_to" value="<?= htmlspecialchars($returnUrl, ENT_QUOTES, 'UTF-8') ?>">
+                            <button type="submit" class="btn-ig-msg">Pedir mensagem</button>
+                        </form>
+                        <?php elseif ($mrBtn === 'pending_sent'): ?>
+                        <span class="btn-ig-msg btn-ig-msg--muted">Pedido enviado</span>
+                        <?php elseif ($mrBtn === 'pending_inbox'): ?>
+                        <a class="btn-ig-msg" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($profileTipo !== '' || $profileCidade !== '' || $profileRelationship !== ''): ?>
+                <p class="ig-meta-line">
+                    <?php
+                    $bits = [];
+                    if ($profileTipo !== '') {
+                        $bits[] = htmlspecialchars($profileTipo, ENT_QUOTES, 'UTF-8');
+                    }
+                    if ($profileCidade !== '') {
+                        $bits[] = htmlspecialchars($profileCidade, ENT_QUOTES, 'UTF-8');
+                    }
+                    if ($profileRelationship !== '') {
+                        $bits[] = htmlspecialchars(club61_view_rel_label($profileRelationship), ENT_QUOTES, 'UTF-8');
+                    }
+                    echo implode(' · ', $bits);
+                    ?>
+                </p>
                 <?php endif; ?>
             </div>
         </div>
 
-        <div class="section-title">Publicações</div>
+        <div id="profile-network-stub" tabindex="-1"></div>
+        <div class="section-title" id="profile-posts-grid">Publicações</div>
         <?php if (empty($postsWithImage)): ?>
             <p class="posts-empty">Nenhuma publicação ainda.</p>
         <?php else: ?>
@@ -582,6 +743,36 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
     <script>
     (function () {
+        var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        var followBtn = document.getElementById('view-follow-btn');
+        var followersEl = document.getElementById('view-followers-count');
+        if (followBtn) {
+            followBtn.addEventListener('click', function () {
+                var fid = followBtn.getAttribute('data-following-id');
+                if (!fid) return;
+                followBtn.disabled = true;
+                var fd = new FormData();
+                fd.append('following_id', fid);
+                fd.append('csrf', PROFILE_CSRF);
+                fetch('/features/profile/follow_toggle.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d.csrf) PROFILE_CSRF = d.csrf;
+                        if (!d.ok) return;
+                        var follow = !!d.following;
+                        followBtn.setAttribute('data-following', follow ? '1' : '0');
+                        followBtn.setAttribute('aria-pressed', follow ? 'true' : 'false');
+                        followBtn.textContent = follow ? 'Seguindo' : 'Seguir';
+                        followBtn.classList.toggle('is-following', follow);
+                        if (followersEl && typeof d.followers_count === 'number') {
+                            followersEl.textContent = String(d.followers_count);
+                        }
+                    })
+                    .catch(function () {})
+                    .finally(function () { followBtn.disabled = false; });
+            });
+        }
+
         var modal = document.getElementById('postModal');
         var modalImg = document.getElementById('postModalImg');
         var modalCaption = document.getElementById('postModalCaption');

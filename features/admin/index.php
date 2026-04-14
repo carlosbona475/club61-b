@@ -10,6 +10,11 @@
 
 declare(strict_types=1);
 
+// TODO: remover após identificar o erro — o PHP não permite ini_set antes de declare(strict_types).
+ini_set('display_errors', '1');
+ini_set('display_startup_errors', '1');
+error_reporting(E_ALL);
+
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';

@@ -265,8 +265,20 @@ function loginUser(string $email, string $password): array
 
 function registerUser(string $email, string $password): array
 {
-    return supabaseAuthRequest('/auth/v1/signup', [
+    $r = supabaseAuthRequest('/auth/v1/signup', [
         'email' => $email,
         'password' => $password,
     ]);
+    if (!empty($r['success']) && !empty($r['data']) && is_array($r['data'])) {
+        $data = $r['data'];
+        $userId = null;
+        if (isset($data['user']) && is_array($data['user']) && isset($data['user']['id'])) {
+            $userId = (string) $data['user']['id'];
+        } elseif (isset($data['id'])) {
+            $userId = (string) $data['id'];
+        }
+        $r['user_id'] = $userId;
+    }
+
+    return $r;
 }

@@ -156,6 +156,9 @@ if (is_array($profileRow)) {
     if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
         $profileRelationship = trim((string) $profileRow['relationship_status']);
     }
+    if (array_key_exists('cidade', $profileRow) && $profileRow['cidade'] !== null) {
+        $cidade = trim((string) $profileRow['cidade']);
+    }
 }
 
 if (
@@ -196,6 +199,9 @@ if (
             }
             if (isset($o['relationship_status'])) {
                 $profileRelationship = trim((string) $o['relationship_status']);
+            }
+            if (array_key_exists('cidade', $o)) {
+                $cidade = $o['cidade'] === null ? '' : trim((string) $o['cidade']);
             }
             if (isset($o['avatar_url']) && trim((string) $o['avatar_url']) !== '') {
                 $avatarUrl = trim((string) $o['avatar_url']);
@@ -316,7 +322,6 @@ if ($is_admin && $access_token !== '' && $current_user_id !== null && $current_u
 $csrf = csrf_token();
 $relLower = strtolower(trim($profileRelationship));
 $igShowAge = $profileAge !== null;
-$igShowCity = trim($cidade) !== '';
 $igShowRel = trim($profileRelationship) !== '';
 
 ?>
@@ -788,7 +793,20 @@ $igShowRel = trim($profileRelationship) !== '';
             color: #7B2EFF;
         }
         .ig-main-col { flex: 1; min-width: 0; }
-        .ig-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; }
+        .ig-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; justify-content: space-between; }
+        .ig-title-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+        .btn-admin-link {
+            display: inline-block;
+            padding: 6px 14px;
+            background: transparent;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #C9A84C;
+            font-size: 0.8rem;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+        .btn-admin-link:hover { background: rgba(201, 168, 76, 0.1); }
         .ig-username {
             margin: 0;
             font-size: clamp(1.35rem, 4vw, 1.65rem);
@@ -846,6 +864,7 @@ $igShowRel = trim($profileRelationship) !== '';
         .btn-dm-icon:hover { border-color: #C9A84C; color: #C9A84C; }
         .ig-meta-line { font-size: 0.88rem; color: #bbb; margin-bottom: 8px; }
         .ig-bio { font-size: 0.9rem; color: #ccc; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+        .profile-cidade { font-size: 0.88rem; color: #C9A84C; margin: 8px 0 0; line-height: 1.4; }
         .perfil-location-row {
             display: flex;
             flex-wrap: wrap;
@@ -922,7 +941,12 @@ $igShowRel = trim($profileRelationship) !== '';
                         <div class="ig-title-row">
                             <h2 class="ig-username"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></h2>
                             <?php if ($is_own_profile): ?>
-                            <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>
+                            <div class="ig-title-actions">
+                                <?php if (is_array($profileRow) && (($profileRow['role'] ?? '') === 'admin')): ?>
+                                <a href="/features/admin/index.php" class="btn-admin-link">⚙️ Painel Admin</a>
+                                <?php endif; ?>
+                                <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>
+                            </div>
                             <?php endif; ?>
                         </div>
                         <div class="ig-actions">
@@ -981,15 +1005,14 @@ $igShowRel = trim($profileRelationship) !== '';
                         <?php if ($profileBio !== ''): ?>
                         <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
                         <?php endif; ?>
-                        <?php if ($igShowAge || $igShowCity || $igShowRel): ?>
+                        <?php if (trim($cidade) !== ''): ?>
+                        <p class="profile-cidade">📍 <?= htmlspecialchars(trim($cidade), ENT_QUOTES, 'UTF-8') ?></p>
+                        <?php endif; ?>
+                        <?php if ($igShowAge || $igShowRel): ?>
                         <p class="ig-meta-line">
                             <?php if ($igShowAge): ?><?= (int) $profileAge ?> anos<?php endif; ?>
-                            <?php if ($igShowCity): ?>
-                                <?php if ($igShowAge): ?> • <?php endif; ?>
-                                <span class="ig-meta-geo"><i class="bi bi-geo-alt" aria-hidden="true"></i><?= htmlspecialchars(trim($cidade), ENT_QUOTES, 'UTF-8') ?></span>
-                            <?php endif; ?>
                             <?php if ($igShowRel): ?>
-                                <?php if ($igShowAge || $igShowCity): ?> • <?php endif; ?>
+                                <?php if ($igShowAge): ?> • <?php endif; ?>
                                 <?= htmlspecialchars(club61_relationship_label($profileRelationship), ENT_QUOTES, 'UTF-8') ?>
                             <?php endif; ?>
                         </p>

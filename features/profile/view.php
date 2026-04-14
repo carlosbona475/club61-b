@@ -53,6 +53,7 @@ if ($current_user_id !== null && (string) $view_user_id === (string) $current_us
 $profileRow = null;
 $avatarUrl = '';
 $profileBio = '';
+$profileCidade = '';
 $profileRelationship = '';
 $posts = [];
 $likeCounts = [];
@@ -119,6 +120,9 @@ if (is_array($profileRow)) {
     }
     if (isset($profileRow['bio']) && $profileRow['bio'] !== null) {
         $profileBio = trim((string) $profileRow['bio']);
+    }
+    if (array_key_exists('cidade', $profileRow) && $profileRow['cidade'] !== null) {
+        $profileCidade = trim((string) $profileRow['cidade']);
     }
     if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
         $profileRelationship = trim((string) $profileRow['relationship_status']);
@@ -378,6 +382,7 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
             font-family: inherit;
         }
         .btn-ig-msg--muted { opacity: 0.75; cursor: default; border-style: dashed; }
+        .profile-cidade { font-size: 0.88rem; color: #C9A84C; margin: 8px 0 0; line-height: 1.4; }
         .ig-bio {
             font-size: 0.92rem;
             color: #ccc;
@@ -598,6 +603,9 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
                 <?php if ($profileBio !== ''): ?>
                 <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
+                <?php endif; ?>
+                <?php if ($profileCidade !== ''): ?>
+                <p class="profile-cidade">📍 <?= htmlspecialchars($profileCidade, ENT_QUOTES, 'UTF-8') ?></p>
                 <?php endif; ?>
 
                 <?php if ($current_user_id !== null && (string) $view_user_id !== (string) $current_user_id): ?>

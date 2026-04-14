@@ -143,8 +143,8 @@ curl_setopt_array($ch, [
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => false,
     CURLOPT_HTTPHEADER => [
-        'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $token,
+        'apikey: ' . SUPABASE_SERVICE_KEY,
+        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
         'Content-Type: application/json',
         'Prefer: return=minimal',
     ],

@@ -103,6 +103,7 @@ function isCurrentUserAdmin(): bool
         return false;
     }
 
+    // Apenas administradores (legado: role vazio ou 'member' não é admin)
     return $role === 'admin';
 }
 

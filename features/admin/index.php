@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 /**
  * Painel Admin — Club61
@@ -15,6 +15,7 @@ require_once dirname(__DIR__, 2) . '/config/paths.php';
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/session.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 // Service role obrigatória para ler perfil e operações admin
@@ -213,6 +214,21 @@ function admin_http_delete(string $pathAndQuery): int
     return $res['code'];
 }
 
+function admin_now_iso_utc(): string
+{
+    return gmdate('Y-m-d\TH:i:s\Z');
+}
+
+/**
+ * Rótulo de role na UI (membro | admin; legado member).
+ */
+function admin_role_is_membro(string $role): bool
+{
+    $r = strtolower(trim($role));
+
+    return $r === 'membro' || $r === 'member';
+}
+
 /** Início do dia UTC (ISO) para filtros gte */
 function admin_utc_midnight_iso(): string
 {
@@ -258,27 +274,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = (string) ($_POST['action'] ?? '');
     $tab = (string) ($_POST['return_tab'] ?? 'dashboard');
-    $allowedTabs = ['dashboard', 'members', 'posts', 'invites'];
+    // Tabs na URL: dashboard | convites | usuarios | posts | stories (aliases legados abaixo)
+    $tabAliasesPost = ['invites' => 'convites', 'members' => 'usuarios'];
+    if (isset($tabAliasesPost[$tab])) {
+        $tab = $tabAliasesPost[$tab];
+    }
+    $allowedTabs = ['dashboard', 'convites', 'usuarios', 'posts', 'stories'];
     if (!in_array($tab, $allowedTabs, true)) {
         $tab = 'dashboard';
     }
 
     $mPage = max(1, (int) ($_POST['m_page'] ?? 1));
     $pPage = max(1, (int) ($_POST['p_page'] ?? 1));
+    $stPage = max(1, (int) ($_POST['st_page'] ?? 1));
     $pageQs = [
         'm_page' => $mPage,
         'p_page' => $pPage,
+        'st_page' => $stPage,
     ];
 
-    if ($action === 'gen_invite') {
-        $code = strtoupper(bin2hex(random_bytes(5)));
-        $payload = json_encode([
+    if ($action === 'gerar_convite' || $action === 'gen_invite') {
+        $code = strtoupper(bin2hex(random_bytes(6)));
+        $expires = gmdate('c', time() + 7 * 86400);
+        $payload = [
             'code' => $code,
             'created_by' => $current_user_id,
-            'status' => 'available',
-        ], JSON_UNESCAPED_SLASHES);
-        admin_json_post('/rest/v1/invites', $payload);
-        admin_redirect_prg('invites', 'Convite gerado: ' . $code, 'ok', $pageQs);
+            'expires_at' => $expires,
+        ];
+        admin_json_post('/rest/v1/invites', json_encode($payload, JSON_UNESCAPED_SLASHES));
+        admin_redirect_prg('convites', 'Convite gerado: ' . $code, 'ok', $pageQs);
+    }
+
+    if ($action === 'excluir_convite') {
+        $inviteId = trim((string) ($_POST['invite_id'] ?? ''));
+        if ($inviteId !== '') {
+            $rows = admin_json_get_list('/rest/v1/invites?id=eq.' . urlencode($inviteId) . '&select=id,used_by');
+            if ($rows !== [] && ($rows[0]['used_by'] ?? null) === null) {
+                admin_http_delete('/rest/v1/invites?id=eq.' . urlencode($inviteId));
+                admin_redirect_prg('convites', 'Convite excluído.', 'ok', $pageQs);
+            }
+        }
+        admin_redirect_prg('convites', 'Não foi possível excluir (já usado ou inválido).', 'error', $pageQs);
     }
 
     if ($action === 'revoke_invite') {
@@ -289,19 +325,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 json_encode(['status' => 'revoked'], JSON_UNESCAPED_SLASHES)
             );
         }
-        admin_redirect_prg('invites', 'Convite revogado.', 'ok', $pageQs);
+        admin_redirect_prg('convites', 'Convite revogado.', 'ok', $pageQs);
     }
 
-    if ($action === 'set_role') {
-        $uid = trim((string) ($_POST['uid'] ?? ''));
-        $role = trim((string) ($_POST['role'] ?? ''));
-        if ($uid !== '' && $uid !== $current_user_id && ($role === 'admin' || $role === 'member')) {
+    if ($action === 'alterar_role' || $action === 'set_role') {
+        $uid = trim((string) ($_POST['target_user_id'] ?? $_POST['uid'] ?? ''));
+        $role = trim((string) ($_POST['nova_role'] ?? $_POST['role'] ?? ''));
+        if ($role === 'member') {
+            $role = 'membro';
+        }
+        if ($uid !== '' && $uid !== $current_user_id && ($role === 'admin' || $role === 'membro')) {
             admin_json_patch(
                 '/rest/v1/profiles?id=eq.' . urlencode($uid),
                 json_encode(['role' => $role], JSON_UNESCAPED_SLASHES)
             );
         }
-        admin_redirect_prg('members', 'Role atualizado.', 'ok', $pageQs);
+        admin_redirect_prg('usuarios', 'Função atualizada.', 'ok', $pageQs);
+    }
+
+    if ($action === 'excluir_usuario') {
+        $exUid = trim((string) ($_POST['target_user_id'] ?? ''));
+        if ($exUid !== '' && $exUid === $current_user_id) {
+            admin_redirect_prg('usuarios', 'Você não pode excluir a própria conta por aqui.', 'error', $pageQs);
+        }
+        admin_redirect_prg('usuarios', 'Exclusão permanente de conta ainda não está disponível.', 'error', $pageQs);
     }
 
     if ($action === 'ban_member') {
@@ -312,7 +359,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 json_encode(['status' => 'banned'], JSON_UNESCAPED_SLASHES)
             );
         }
-        admin_redirect_prg('members', 'Membro banido (status=banned).', 'ok', $pageQs);
+        admin_redirect_prg('usuarios', 'Membro banido (status=banned).', 'ok', $pageQs);
     }
 
     if ($action === 'remove_member') {
@@ -320,15 +367,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($uid !== '' && $uid !== $current_user_id) {
             admin_http_delete('/rest/v1/profiles?id=eq.' . urlencode($uid));
         }
-        admin_redirect_prg('members', 'Membro removido.', 'ok', $pageQs);
+        admin_redirect_prg('usuarios', 'Membro removido.', 'ok', $pageQs);
     }
 
-    if ($action === 'delete_post') {
-        $pid = trim((string) ($_POST['pid'] ?? ''));
+    if ($action === 'excluir_post' || $action === 'delete_post') {
+        $pid = trim((string) ($_POST['post_id'] ?? $_POST['pid'] ?? ''));
         if ($pid !== '') {
             admin_http_delete('/rest/v1/posts?id=eq.' . urlencode($pid));
         }
         admin_redirect_prg('posts', 'Post removido.', 'ok', $pageQs);
+    }
+
+    if ($action === 'excluir_story') {
+        $sid = trim((string) ($_POST['story_id'] ?? ''));
+        if ($sid !== '') {
+            admin_http_delete('/rest/v1/stories?id=eq.' . urlencode($sid));
+        }
+        admin_redirect_prg('stories', 'Story removido.', 'ok', $pageQs);
     }
 
     if ($action === 'delete_all_user_posts') {
@@ -349,27 +404,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $csrf = admin_csrf_token();
 
 $tab = (string) ($_GET['tab'] ?? 'dashboard');
-$allowedTabsGet = ['dashboard', 'members', 'posts', 'invites'];
+// Navegação: ?tab=convites|usuarios|... — aliases legados (invites/members) mantidos
+$tabAliasesGet = [
+    'invites' => 'convites',
+    'members' => 'usuarios',
+];
+if (isset($tabAliasesGet[$tab])) {
+    $tab = $tabAliasesGet[$tab];
+}
+$allowedTabsGet = ['dashboard', 'convites', 'usuarios', 'posts', 'stories'];
 if (!in_array($tab, $allowedTabsGet, true)) {
     $tab = 'dashboard';
 }
 
 $mPage = max(1, (int) ($_GET['m_page'] ?? 1));
 $pPage = max(1, (int) ($_GET['p_page'] ?? 1));
+$stPage = max(1, (int) ($_GET['st_page'] ?? 1));
 $offsetMembers = ($mPage - 1) * ADMIN_PAGE_LIMIT;
 $offsetPosts = ($pPage - 1) * ADMIN_PAGE_LIMIT;
+$offsetStories = ($stPage - 1) * ADMIN_PAGE_LIMIT;
 
 $startUtc = admin_utc_midnight_iso();
+$nowIso = admin_now_iso_utc();
 
 $total_members = admin_count_exact('/rest/v1/profiles?select=id');
 $total_posts = admin_count_exact('/rest/v1/posts?select=id');
+$totalStoriesAll = admin_count_exact('/rest/v1/stories?select=id');
+$total_stories_active = admin_count_exact('/rest/v1/stories?select=id&expires_at=gt.' . rawurlencode($nowIso));
 $posts_today = admin_count_exact('/rest/v1/posts?select=id&created_at=gte.' . rawurlencode($startUtc));
 $new_members_today = admin_count_exact('/rest/v1/profiles?select=id&created_at=gte.' . rawurlencode($startUtc));
 
+$convitesDisp = admin_count_exact('/rest/v1/invites?select=id&used_by=is.null&expires_at=gt.' . rawurlencode($nowIso));
+$convitesUsados = admin_count_exact('/rest/v1/invites?select=id&used_by=not.is.null');
 $totalInvitesAvailable = admin_count_exact('/rest/v1/invites?select=id&status=eq.available');
 $totalAdmins = admin_count_exact('/rest/v1/profiles?select=id&role=eq.admin');
 
-$membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at'
+$membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at,cidade'
     . '&order=created_at.asc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetMembers;
 $members = admin_json_get_list($membersPath);
 
@@ -377,8 +447,12 @@ $postsPath = '/rest/v1/posts?select=id,user_id,image_url,caption,created_at'
     . '&order=created_at.desc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetPosts;
 $posts = admin_json_get_list($postsPath);
 
-$invitesPath = '/rest/v1/invites?select=id,code,status,created_at&order=created_at.desc&limit=50';
+$invitesPath = '/rest/v1/invites?select=*&order=created_at.desc&limit=80';
 $invites = admin_json_get_list($invitesPath);
+
+$storiesPath = '/rest/v1/stories?select=id,user_id,image_url,created_at,expires_at&expires_at=gt.' . rawurlencode($nowIso)
+    . '&order=created_at.desc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetStories;
+$stories = admin_json_get_list($storiesPath);
 
 /** @var array<string, array<string, mixed>> $memberMap */
 $memberMap = [];
@@ -397,7 +471,7 @@ foreach ($posts as $pr) {
 $missingAuthorIds = array_keys(array_diff_key($postUserIds, $memberMap));
 if ($missingAuthorIds !== []) {
     $inList = implode(',', $missingAuthorIds);
-    $extraProfiles = admin_json_get_list('/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at&id=in.(' . $inList . ')');
+    $extraProfiles = admin_json_get_list('/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at,cidade&id=in.(' . $inList . ')');
     foreach ($extraProfiles as $row) {
         if (isset($row['id'])) {
             $memberMap[(string) $row['id']] = $row;
@@ -405,8 +479,50 @@ if ($missingAuthorIds !== []) {
     }
 }
 
+$postStoryIds = [];
+foreach ($stories as $sr) {
+    if (!empty($sr['user_id'])) {
+        $postStoryIds[(string) $sr['user_id']] = true;
+    }
+}
+$missingStoryAuthors = array_keys(array_diff_key($postStoryIds, $memberMap));
+if ($missingStoryAuthors !== []) {
+    $inListS = implode(',', $missingStoryAuthors);
+    $extraStoryProf = admin_json_get_list('/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at,cidade&id=in.(' . $inListS . ')');
+    foreach ($extraStoryProf as $row) {
+        if (isset($row['id'])) {
+            $memberMap[(string) $row['id']] = $row;
+        }
+    }
+}
+
+/** @var array<string, string> $displayIdByUserId — display_id público por user id (UUID nunca na UI) */
+$displayIdByUserId = [];
+foreach ($memberMap as $uid => $row) {
+    $displayIdByUserId[$uid] = clLabel($row);
+}
+$inviteUsedMissing = [];
+foreach ($invites as $inv) {
+    if (!empty($inv['used_by'])) {
+        $ub = (string) $inv['used_by'];
+        if (!isset($displayIdByUserId[$ub])) {
+            $inviteUsedMissing[$ub] = true;
+        }
+    }
+}
+if ($inviteUsedMissing !== []) {
+    $inListU = implode(',', array_keys($inviteUsedMissing));
+    $extraUsedProf = admin_json_get_list('/rest/v1/profiles?select=id,display_id&id=in.(' . $inListU . ')');
+    foreach ($extraUsedProf as $row) {
+        if (isset($row['id'])) {
+            $displayIdByUserId[(string) $row['id']] = clLabel($row);
+        }
+    }
+}
+
 $totalMembersPages = max(1, (int) ceil($total_members / ADMIN_PAGE_LIMIT));
 $totalPostsPages = max(1, (int) ceil($total_posts / ADMIN_PAGE_LIMIT));
+$totalStoriesPages = max(1, (int) ceil(max(0, $total_stories_active) / ADMIN_PAGE_LIMIT));
 
 $flashStatus = (string) ($_GET['status'] ?? '');
 $flashMessage = (string) ($_GET['message'] ?? '');
@@ -420,6 +536,17 @@ function admin_format_dt(?array $row): string
     if ($row !== null && isset($row['created_at'])) {
         $iso = (string) $row['created_at'];
     }
+    if ($iso === '') {
+        return '—';
+    }
+    $ts = strtotime($iso);
+
+    return $ts !== false ? date('d/m/Y H:i', $ts) : htmlspecialchars($iso, ENT_QUOTES, 'UTF-8');
+}
+
+function admin_format_iso(?string $iso): string
+{
+    $iso = trim((string) $iso);
     if ($iso === '') {
         return '—';
     }
@@ -454,12 +581,13 @@ function admin_truncate_caption(?array $row, int $max = 80): string
     return $cap;
 }
 
-function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
+function admin_page_url(string $tab, int $mPageNum, int $pPageNum, int $stPageNum = 1): string
 {
     return '/features/admin/index.php?' . http_build_query([
         'tab' => $tab,
         'm_page' => $mPageNum,
         'p_page' => $pPageNum,
+        'st_page' => $stPageNum,
     ]);
 }
 
@@ -471,584 +599,831 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel Admin — Club61</title>
     <style>
+        :root {
+            --bg: #0A0A0A;
+            --card: #111111;
+            --border: #222222;
+            --gold: #C9A84C;
+            --purple: #7B2EFF;
+            --text: #FFFFFF;
+            --muted: #888888;
+            --danger: #FF4444;
+            --success: #2ECC71;
+            --row-a: #111111;
+            --row-b: #0d0d0d;
+        }
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html { height: 100%; }
         body {
             min-height: 100%;
-            background: #0A0A0A;
-            color: #fff;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            padding-bottom: 32px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
         }
         a { color: inherit; text-decoration: none; }
-        .admin-header {
-            position: sticky;
+        .admin-shell { display: flex; min-height: 100vh; }
+        .sidebar-toggle {
+            display: none;
+            position: fixed;
+            top: 12px;
+            left: 12px;
+            z-index: 200;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--gold);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .sidebar-toggle:hover { background: #1a1a1a; }
+        .admin-sidebar {
+            position: fixed;
+            left: 0;
             top: 0;
-            z-index: 100;
+            width: 240px;
+            height: 100vh;
+            background: var(--card);
+            border-right: 1px solid var(--border);
+            padding: 20px 0;
+            display: flex;
+            flex-direction: column;
+            z-index: 150;
+            transition: transform 0.25s ease;
+        }
+        .sidebar-brand {
+            padding: 0 20px 16px;
+            font-weight: 700;
+            font-size: 1rem;
+            color: var(--gold);
+            letter-spacing: 0.06em;
+        }
+        .admin-nav { flex: 1; display: flex; flex-direction: column; gap: 4px; padding: 0 10px; }
+        .admin-nav a {
+            display: block;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--muted);
+            font-size: 0.9rem;
+            transition: background 0.2s ease, color 0.2s ease;
+        }
+        .admin-nav a:hover { background: #1a1a1a; color: var(--text); }
+        .admin-nav a.is-active { background: #1e1e1e; color: var(--text); border-left: 3px solid var(--gold); }
+        .sidebar-feed {
+            margin: 12px 16px 0;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            color: var(--gold);
+            font-size: 0.85rem;
+            text-align: center;
+            transition: background 0.2s ease;
+        }
+        .sidebar-feed:hover { background: rgba(201, 168, 76, 0.08); }
+        .admin-main {
+            flex: 1;
+            margin-left: 240px;
+            min-width: 0;
+            padding: 20px 20px 40px;
+        }
+        .main-topbar {
             display: flex;
             align-items: center;
+            justify-content: space-between;
             gap: 12px;
-            padding: 12px 16px;
-            background: #0A0A0A;
-            border-bottom: 1px solid #1a1a1a;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
         }
-        .admin-back {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 40px;
-            height: 40px;
-            border-radius: 8px;
-            background: #111;
-            border: 1px solid #222;
-            color: #C9A84C;
-            font-size: 1.1rem;
-            transition: background 0.15s ease;
-        }
-        .admin-back:hover { background: #1a1a1a; }
-        .admin-title-wrap { flex: 1; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-        .admin-title { font-size: 1.15rem; font-weight: 700; letter-spacing: 0.04em; }
-        .badge-admin {
+        .main-title { font-size: 1.25rem; font-weight: 700; }
+        .badge-admin-inline {
             display: inline-block;
             padding: 4px 10px;
-            border-radius: 6px;
-            background: #7B2EFF;
+            border-radius: 20px;
+            background: var(--purple);
             color: #fff;
-            font-size: 0.7rem;
+            font-size: 0.65rem;
             font-weight: 700;
             letter-spacing: 0.08em;
         }
         .admin-toast {
             display: none;
-            margin: 12px 16px 0;
-            padding: 11px 14px;
+            margin-bottom: 16px;
+            padding: 12px 14px;
             border-radius: 8px;
             font-size: 0.88rem;
-            border: 1px solid #333;
-            background: #111;
-            color: #C9A84C;
+            border: 1px solid var(--border);
+            background: var(--card);
+            color: var(--gold);
         }
         .admin-toast.is-visible { display: block; }
         .admin-toast.error { color: #ff6b6b; border-color: rgba(255,107,107,0.35); }
-        /* Aliases pedidos (mesmo visual escuro) */
-        .dark-card { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; }
-        .dark-btn { border-radius: 6px; border: 1px solid #333; background: #1a1a1a; color: #ddd; cursor: pointer; }
-        .dark-input {
-            width: 100%;
-            max-width: 320px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid #222;
-            background: #111;
-            color: #fff;
-            font-size: 0.9rem;
-            outline: none;
-        }
-        .dark-input:focus { border-color: #7B2EFF; }
-        .admin-tabs.tabs-bar { }
-        .stats-grid {
+        .stats-grid-dash {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 10px;
-            padding: 16px;
-            max-width: 960px;
-            margin: 0 auto;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 12px;
+            margin-bottom: 8px;
         }
-        @media (max-width: 640px) {
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        @media (max-width: 900px) {
+            .stats-grid-dash { grid-template-columns: repeat(2, 1fr); }
         }
-        .stat-card {
-            background: #111;
-            border: 1px solid #1a1a1a;
+        .stat-card-dash {
+            background: var(--card);
+            border: 1px solid var(--border);
             border-radius: 10px;
-            padding: 14px 12px;
+            padding: 18px 14px;
             text-align: center;
+            transition: background 0.2s ease;
         }
-        .stat-card:hover { background: #1a1a1a; }
-        .stat-label { font-size: 0.72rem; color: #888; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
-        .stat-num { font-size: 1.65rem; font-weight: 800; color: #C9A84C; line-height: 1.1; }
-        .tabs-bar {
+        .stat-card-dash:hover { background: #161616; }
+        .stat-num-dash {
+            font-size: 1.85rem;
+            font-weight: 800;
+            color: var(--gold);
+            line-height: 1.15;
+            margin-bottom: 8px;
+        }
+        .stat-label-dash {
+            font-size: 0.8rem;
+            color: var(--muted);
+            line-height: 1.3;
+        }
+        .panel-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 16px;
+        }
+        .panel-toolbar {
             display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
             flex-wrap: wrap;
-            gap: 6px;
-            padding: 0 16px 12px;
-            max-width: 960px;
-            margin: 0 auto;
+            margin-bottom: 16px;
         }
-        .tab-btn {
-            border: none;
-            cursor: pointer;
-            padding: 10px 14px;
-            border-radius: 8px;
-            background: transparent;
-            color: #555;
-            font-size: 0.88rem;
-            font-weight: 600;
-            transition: background 0.15s ease, color 0.15s ease;
-        }
-        .tab-btn:hover { color: #aaa; }
-        .tab-btn.is-active { background: #1e1e1e; color: #fff; }
-        .tab-panel { display: none; max-width: 960px; margin: 0 auto; padding: 0 16px 24px; }
-        .tab-panel.is-active { display: block; }
-        .panel-inner { background: #111; border: 1px solid #1a1a1a; border-radius: 10px; padding: 16px; }
-        .btn-gen {
+        .panel-toolbar h2 { font-size: 1rem; font-weight: 600; }
+        .btn-gold {
             display: inline-flex;
             align-items: center;
             gap: 6px;
-            margin-bottom: 16px;
-            padding: 10px 16px;
+            padding: 10px 18px;
             border: none;
             border-radius: 8px;
-            background: #7B2EFF;
-            color: #fff;
-            font-weight: 600;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: box-shadow 0.2s ease, background 0.15s ease;
-        }
-        .btn-gen:hover { box-shadow: 0 0 20px rgba(123, 46, 255, 0.45); }
-        .invite-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 12px;
-        }
-        .invite-card { background: #0A0A0A; border: 1px solid #222; border-radius: 10px; padding: 14px; }
-        .invite-code {
-            font-family: ui-monospace, monospace;
-            font-size: 1rem;
+            background: linear-gradient(180deg, #d4b45c, var(--gold));
+            color: #111;
             font-weight: 700;
-            color: #C9A84C;
+            font-size: 0.88rem;
             cursor: pointer;
-            word-break: break-all;
+            transition: filter 0.2s ease, transform 0.15s ease;
         }
-        .invite-hint { font-size: 0.72rem; color: #666; margin-top: 4px; }
-        .st-ok { color: #51cf66; }
-        .st-used { color: #888; }
-        .st-revoked { color: #ff6b6b; }
-        .btn-revoke {
-            margin-top: 10px;
-            padding: 8px 12px;
-            border: 1px solid #444;
-            border-radius: 6px;
-            background: #1a1a1a;
-            color: #fff;
-            font-size: 0.8rem;
-            cursor: pointer;
+        .btn-gold:hover { filter: brightness(1.08); }
+        .dark-input {
+            width: 100%;
+            max-width: 360px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: var(--bg);
+            color: var(--text);
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.2s ease;
         }
-        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .dark-input:focus { border-color: var(--purple); }
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.86rem;
+        }
         .data-table th, .data-table td {
-            padding: 10px 8px;
-            border-bottom: 1px solid #1a1a1a;
+            padding: 11px 10px;
             text-align: left;
-            vertical-align: middle;
+            border-bottom: 1px solid var(--border);
         }
-        .data-table th { color: #888; font-weight: 600; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; }
-        .avatar-sm {
-            width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
-            background: #0A0A0A; border: 1px solid #333; vertical-align: middle;
+        .data-table thead th {
+            color: var(--muted);
+            font-weight: 600;
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
         }
-        .avatar-fallback-sm {
-            width: 32px; height: 32px; border-radius: 50%; background: #0A0A0A; border: 1px solid #333;
-            display: inline-flex; align-items: center; justify-content: center;
-            font-size: 0.85rem; color: #7B2EFF;
+        .data-table tbody tr:nth-child(odd) { background: var(--row-a); }
+        .data-table tbody tr:nth-child(even) { background: var(--row-b); }
+        .mono-code {
+            font-family: ui-monospace, 'Cascadia Code', monospace;
+            font-size: 1.05rem;
+            font-weight: 700;
+            color: var(--gold);
+            letter-spacing: 0.04em;
         }
-        .name-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
-        .name-main { font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .name-sub { font-size: 0.75rem; color: #777; }
-        .badge-role { display: inline-block; padding: 3px 8px; border-radius: 6px; font-size: 0.72rem; font-weight: 700; }
-        .badge-role.admin { background: rgba(201, 168, 76, 0.15); color: #C9A84C; border: 1px solid rgba(201, 168, 76, 0.35); }
-        .badge-role.member { background: #1a1a1a; color: #888; border: 1px solid #333; }
-        .badge-ban { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 4px; font-size: 0.65rem; background: rgba(255,107,107,0.15); color: #ff6b6b; border: 1px solid rgba(255,107,107,0.3); }
-        .btn-action {
+        .badge-pill {
             display: inline-block;
-            margin-right: 6px;
-            margin-bottom: 4px;
-            padding: 6px 10px;
-            border-radius: 6px;
-            border: 1px solid #333;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .badge-pill.ok { background: rgba(46, 204, 113, 0.15); color: var(--success); border: 1px solid rgba(46, 204, 113, 0.35); }
+        .badge-pill.muted { background: #1a1a1a; color: var(--muted); border: 1px solid #333; }
+        .badge-pill.admin { background: rgba(201, 168, 76, 0.15); color: var(--gold); border: 1px solid rgba(201, 168, 76, 0.35); }
+        .badge-pill.membro { background: #1a1a1a; color: var(--muted); border: 1px solid #333; }
+        .btn-sm {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
             background: #1a1a1a;
             color: #ddd;
-            font-size: 0.78rem;
+            font-size: 0.8rem;
             cursor: pointer;
+            transition: background 0.2s ease, border-color 0.2s ease;
         }
-        .btn-action:hover { background: #222; }
-        .thumb-48 {
-            width: 48px; height: 48px; object-fit: cover; border-radius: 6px;
-            background: #0A0A0A; border: 1px solid #333;
+        .btn-sm:hover { background: #222; }
+        .btn-purple {
+            border-color: rgba(123, 46, 255, 0.5);
+            background: rgba(123, 46, 255, 0.2);
+            color: #e0d0ff;
         }
-        .cap-cell { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #ccc; }
-        .dash-hint { font-size: 0.85rem; color: #777; line-height: 1.5; margin-top: 8px; }
+        .btn-purple:hover { background: rgba(123, 46, 255, 0.35); }
+        .btn-danger {
+            border-color: rgba(255, 68, 68, 0.45);
+            background: rgba(255, 68, 68, 0.12);
+            color: #ff8a8a;
+        }
+        .btn-danger:hover { background: rgba(255, 68, 68, 0.22); }
+        .btn-excluir-dark {
+            border-color: #442222;
+            background: #1a0a0a;
+            color: #cc6666;
+        }
+        .btn-excluir-dark:hover { background: #2a1010; }
+        .btn-sm:disabled, .btn-sm[disabled] {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+        .posts-cards { display: flex; flex-direction: column; gap: 12px; }
+        .post-admin-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px 16px;
+            background: var(--row-b);
+            display: grid;
+            gap: 8px;
+        }
+        .post-admin-meta {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 10px 16px;
+            font-size: 0.88rem;
+        }
+        .post-admin-author { font-weight: 600; color: var(--gold); }
+        .post-admin-date { color: var(--muted); font-size: 0.8rem; }
+        .post-admin-snippet { color: #ccc; font-size: 0.88rem; line-height: 1.45; word-break: break-word; }
+        .stories-grid-adm {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 14px;
+        }
+        @media (max-width: 768px) {
+            .stories-grid-adm { grid-template-columns: 1fr; }
+        }
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .stories-grid-adm { grid-template-columns: repeat(2, 1fr); }
+        }
+        .story-cell {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--row-a);
+        }
+        .story-cell-img {
+            width: 100%;
+            aspect-ratio: 9/16;
+            max-height: 220px;
+            object-fit: cover;
+            background: #0a0a0a;
+            display: block;
+        }
+        .story-cell-body { padding: 10px; font-size: 0.82rem; }
+        .story-cell-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+        .admin-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+        .admin-modal.is-open { display: flex; }
+        .admin-modal-overlay {
+            position: absolute;
+            inset: 0;
+            background: rgba(0,0,0,0.72);
+        }
+        .admin-modal-card {
+            position: relative;
+            z-index: 1;
+            max-width: 420px;
+            width: 100%;
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 16px 48px rgba(0,0,0,0.55);
+        }
+        .admin-modal-card p { color: #ddd; font-size: 0.92rem; line-height: 1.5; margin-bottom: 18px; }
+        .admin-modal-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+        .btn-modal-cancel {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+        .btn-modal-cancel:hover { background: #1a1a1a; color: var(--text); }
+        .btn-modal-ok {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: 1px solid #662222;
+            background: #2a1010;
+            color: #ff8888;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background 0.2s ease;
+        }
+        .btn-modal-ok:hover { background: #3a1818; }
+        @media (max-width: 900px) {
+            .sidebar-toggle { display: block; }
+            .admin-sidebar {
+                transform: translateX(-100%);
+                box-shadow: 8px 0 24px rgba(0,0,0,0.4);
+            }
+            body.sidebar-open .admin-sidebar { transform: translateX(0); }
+            .admin-main { margin-left: 0; padding-top: 56px; }
+        }
     </style>
 </head>
 <body>
-    <header class="admin-header">
-        <a class="admin-back" href="/features/feed/index.php" aria-label="Voltar ao feed">←</a>
-        <div class="admin-title-wrap">
-            <h1 class="admin-title">Painel Admin</h1>
-            <span class="badge-admin">ADMIN</span>
-        </div>
-    </header>
-
-    <?php if ($flashStatus === 'ok' && $flashMessage !== ''): ?>
-        <div id="adminFlash" class="admin-toast is-visible" role="status"><?= htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8') ?></div>
-    <?php elseif ($flashStatus === 'error' && $flashMessage !== ''): ?>
-        <div id="adminFlash" class="admin-toast is-visible error" role="alert"><?= htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8') ?></div>
-    <?php endif; ?>
-
-    <div class="tabs-bar admin-tabs" role="tablist">
-        <button type="button" class="tab-btn<?= $tab === 'dashboard' ? ' is-active' : '' ?>" role="tab" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
-        <button type="button" class="tab-btn<?= $tab === 'members' ? ' is-active' : '' ?>" role="tab" data-tab="members" onclick="switchTab('members')">👥 Membros</button>
-        <button type="button" class="tab-btn<?= $tab === 'posts' ? ' is-active' : '' ?>" role="tab" data-tab="posts" onclick="switchTab('posts')">🖼️ Posts</button>
-        <button type="button" class="tab-btn<?= $tab === 'invites' ? ' is-active' : '' ?>" role="tab" data-tab="invites" onclick="switchTab('invites')">🎟️ Convites</button>
-    </div>
-
-    <!-- Dashboard -->
-    <section id="panel-dashboard" class="tab-panel<?= $tab === 'dashboard' ? ' is-active' : '' ?>" role="tabpanel" data-panel="dashboard" <?= $tab === 'dashboard' ? '' : 'hidden' ?>>
-        <div class="stats-grid">
-            <div class="stat-card dark-card">
-                <div class="stat-label">Total membros</div>
-                <div class="stat-num"><?= htmlspecialchars((string) $total_members, ENT_QUOTES, 'UTF-8') ?></div>
+<?php
+$hDash = htmlspecialchars(admin_page_url('dashboard', $mPage, $pPage, $stPage), ENT_QUOTES, 'UTF-8');
+$hConv = htmlspecialchars(admin_page_url('convites', $mPage, $pPage, $stPage), ENT_QUOTES, 'UTF-8');
+$hUser = htmlspecialchars(admin_page_url('usuarios', $mPage, $pPage, $stPage), ENT_QUOTES, 'UTF-8');
+$hPost = htmlspecialchars(admin_page_url('posts', $mPage, $pPage, $stPage), ENT_QUOTES, 'UTF-8');
+$hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), ENT_QUOTES, 'UTF-8');
+?>
+<div class="admin-shell">
+    <button type="button" class="sidebar-toggle" id="sidebarToggle" aria-label="Abrir menu">☰</button>
+    <aside class="admin-sidebar" id="adminSidebar" aria-label="Navegação admin">
+        <div class="sidebar-brand">Club61 · Admin</div>
+        <nav class="admin-nav">
+            <a href="<?= $hDash ?>" class="<?= $tab === 'dashboard' ? 'is-active' : '' ?>">📊 Dashboard</a>
+            <a href="<?= $hConv ?>" class="<?= $tab === 'convites' ? 'is-active' : '' ?>">🎫 Convites</a>
+            <a href="<?= $hUser ?>" class="<?= $tab === 'usuarios' ? 'is-active' : '' ?>">👥 Usuários</a>
+            <a href="<?= $hPost ?>" class="<?= $tab === 'posts' ? 'is-active' : '' ?>">📝 Posts</a>
+            <a href="<?= $hStory ?>" class="<?= $tab === 'stories' ? 'is-active' : '' ?>">📸 Stories</a>
+        </nav>
+        <a class="sidebar-feed" href="/features/feed/index.php">← Voltar ao feed</a>
+    </aside>
+    <div class="admin-main">
+        <header class="main-topbar">
+            <div>
+                <span class="main-title">Painel administrativo</span>
+                <span class="badge-admin-inline" style="margin-left:8px">ADMIN</span>
             </div>
-            <div class="stat-card dark-card">
-                <div class="stat-label">Posts hoje</div>
-                <div class="stat-num"><?= htmlspecialchars((string) $posts_today, ENT_QUOTES, 'UTF-8') ?></div>
-            </div>
-            <div class="stat-card dark-card">
-                <div class="stat-label">Novos membros hoje</div>
-                <div class="stat-num"><?= htmlspecialchars((string) $new_members_today, ENT_QUOTES, 'UTF-8') ?></div>
-            </div>
-            <div class="stat-card dark-card">
-                <div class="stat-label">Total posts</div>
-                <div class="stat-num"><?= htmlspecialchars((string) $total_posts, ENT_QUOTES, 'UTF-8') ?></div>
-            </div>
-        </div>
-        <div class="panel-inner dark-card" style="margin:0 auto;max-width:960px">
-            <p class="dash-hint">
-                Resumo rápido. Convites ativos: <strong style="color:#C9A84C"><?= htmlspecialchars((string) $totalInvitesAvailable, ENT_QUOTES, 'UTF-8') ?></strong>
-                · Admins: <strong style="color:#C9A84C"><?= htmlspecialchars((string) $totalAdmins, ENT_QUOTES, 'UTF-8') ?></strong>
-            </p>
-            <p class="dash-hint" style="margin-top:12px;color:#555;font-size:0.8rem">
-                Banimento usa <code style="color:#888">profiles.status = 'banned'</code>. Se o PATCH falhar, adicione a coluna no Supabase.
-            </p>
-        </div>
-    </section>
+        </header>
 
-    <!-- Membros -->
-    <section id="panel-members" class="tab-panel<?= $tab === 'members' ? ' is-active' : '' ?>" role="tabpanel" data-panel="members" <?= $tab === 'members' ? '' : 'hidden' ?>>
-        <div class="panel-inner dark-card" style="overflow-x:auto">
-            <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
-                <label for="memberSearch" class="stat-label" style="margin:0">Buscar</label>
-                <input type="search" id="memberSearch" class="dark-input" placeholder="CL, role, status..." autocomplete="off">
+        <?php if ($flashStatus === 'ok' && $flashMessage !== ''): ?>
+            <div class="admin-toast is-visible" role="status"><?= htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php elseif ($flashStatus === 'error' && $flashMessage !== ''): ?>
+            <div class="admin-toast is-visible error" role="alert"><?= htmlspecialchars($flashMessage, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
+
+        <?php if ($tab === 'dashboard'): ?>
+        <section class="admin-section-dashboard" aria-label="Dashboard">
+            <div class="stats-grid-dash">
+                <div class="stat-card-dash">
+                    <div class="stat-num-dash"><?= htmlspecialchars((string) $total_members, ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="stat-label-dash">👥 Total usuários</div>
+                </div>
+                <div class="stat-card-dash">
+                    <div class="stat-num-dash"><?= htmlspecialchars((string) $total_posts, ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="stat-label-dash">📝 Total posts</div>
+                </div>
+                <div class="stat-card-dash">
+                    <div class="stat-num-dash"><?= htmlspecialchars((string) $total_stories_active, ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="stat-label-dash">📸 Stories ativos</div>
+                </div>
+                <div class="stat-card-dash">
+                    <div class="stat-num-dash"><?= htmlspecialchars((string) $convitesDisp, ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="stat-label-dash">🎫 Convites disponíveis</div>
+                </div>
+                <div class="stat-card-dash">
+                    <div class="stat-num-dash"><?= htmlspecialchars((string) $convitesUsados, ENT_QUOTES, 'UTF-8') ?></div>
+                    <div class="stat-label-dash">✅ Convites usados</div>
+                </div>
             </div>
-            <table class="data-table" id="membersTable">
-                <thead>
-                    <tr>
-                        <th>Membro</th>
-                        <th>Info</th>
-                        <th>Role / Status</th>
-                        <th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($members as $mem): ?>
-                    <?php
+        </section>
+        <?php endif; ?>
 
-                    $mid = isset($mem['id']) ? (string) $mem['id'] : '';
-                    $lbl = clLabel($mem);
-                    $av = isset($mem['avatar_url']) ? trim((string) $mem['avatar_url']) : '';
-                    $role = isset($mem['role']) ? (string) $mem['role'] : 'member';
-                    $pstatus = isset($mem['status']) ? trim((string) $mem['status']) : '';
-                    $isSelf = ($mid !== '' && $mid === $current_user_id);
-                    $searchBlob = strtolower($lbl . ' ' . $pstatus . ' ' . $role);
-                    ?>
-                    <tr data-search="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8') ?>">
-                        <td>
-                            <div class="name-cell">
-                                <?php if ($av !== ''): ?>
-                                    <img class="avatar-sm" src="<?= htmlspecialchars($av, ENT_QUOTES, 'UTF-8') ?>" alt="">
-                                <?php else: ?>
-                                    <span class="avatar-fallback-sm" aria-hidden="true">&#128100;</span>
-                                <?php endif; ?>
-                                <div style="min-width:0">
-                                    <div class="name-main"><?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?></div>
-                                </div>
-                            </div>
-                        </td>
-                        <td style="color:#666;font-size:0.85rem">—</td>
-                        <td>
-                            <?php if ($role === 'admin'): ?>
-                                <span class="badge-role admin">★ Admin</span>
-                            <?php else: ?>
-                                <span class="badge-role member">Membro</span>
-                            <?php endif; ?>
-                            <?php if ($pstatus === 'banned'): ?>
-                                <span class="badge-ban">BANIDO</span>
-                            <?php endif; ?>
-                        </td>
-                        <td>
-                            <?php if (!$isSelf): ?>
-                                <?php if ($role !== 'admin'): ?>
-                                    <form method="post" action="" style="display:inline">
-                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                        <input type="hidden" name="return_tab" value="members">
-                                        <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                        <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                        <input type="hidden" name="action" value="set_role">
-                                        <input type="hidden" name="uid" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
-                                        <input type="hidden" name="role" value="admin">
-                                        <button type="submit" class="btn-action dark-btn">↑ Promover</button>
-                                    </form>
-                                <?php else: ?>
-                                    <form method="post" action="" style="display:inline">
-                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                        <input type="hidden" name="return_tab" value="members">
-                                        <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                        <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                        <input type="hidden" name="action" value="set_role">
-                                        <input type="hidden" name="uid" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
-                                        <input type="hidden" name="role" value="member">
-                                        <button type="submit" class="btn-action dark-btn">↓ Rebaixar</button>
-                                    </form>
-                                <?php endif; ?>
-                                <form method="post" action="" style="display:inline" onsubmit="return confirm('Banir este membro?');">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                    <input type="hidden" name="return_tab" value="members">
-                                    <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                    <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                    <input type="hidden" name="action" value="ban_member">
-                                    <input type="hidden" name="uid" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-action dark-btn" style="border-color:#553;color:#ff6b6b">Banir</button>
-                                </form>
-                                <form method="post" action="" style="display:inline" onsubmit="return confirm('Remover este membro do profiles?');">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                    <input type="hidden" name="return_tab" value="members">
-                                    <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                    <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                    <input type="hidden" name="action" value="remove_member">
-                                    <input type="hidden" name="uid" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-action dark-btn">✕ Remover</button>
-                                </form>
-                            <?php else: ?>
-                                <span style="color:#555;font-size:0.8rem">—</span>
-                            <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <?php
+        <?php if ($tab === 'convites'): ?>
+        <section class="admin-section-invites" aria-label="Convites">
+            <div class="panel-card">
+                <div class="panel-toolbar">
+                    <h2>Convites</h2>
+                    <form method="post" action="" style="margin:0">
+                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="return_tab" value="convites">
+                        <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                        <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                        <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                        <input type="hidden" name="action" value="gerar_convite">
+                        <button type="submit" class="btn-gold">＋ Gerar novo convite</button>
+                    </form>
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Criado em</th>
+                                <th>Expira em</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($invites as $inv): ?>
+                            <?php
+                            $ic = isset($inv['code']) ? (string) $inv['code'] : '';
+                            $iid = isset($inv['id']) ? (string) $inv['id'] : '';
+                            $st = isset($inv['status']) ? (string) $inv['status'] : '';
+                            $usedBy = $inv['used_by'] ?? null;
+                            $expRaw = isset($inv['expires_at']) ? (string) $inv['expires_at'] : '';
+                            $crRaw = isset($inv['created_at']) ? (string) $inv['created_at'] : '';
+                            $expTs = $expRaw !== '' ? strtotime($expRaw) : false;
+                            $isExpired = ($expTs !== false && $expTs < time());
+                            $isUsed = ($usedBy !== null && $usedBy !== '');
+                            $derivedAvail = !$isUsed && !$isExpired && $st !== 'revoked';
+                            $usedByDisp = '';
+                            if ($isUsed && is_string($usedBy) && $usedBy !== '') {
+                                $usedByDisp = $displayIdByUserId[$usedBy] ?? '—';
+                            }
+                            ?>
+                            <tr>
+                                <td><span class="mono-code"><?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?></span></td>
+                                <td style="color:var(--muted)"><?= htmlspecialchars(admin_format_iso($crRaw !== '' ? $crRaw : null), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td style="color:var(--muted)"><?= htmlspecialchars(admin_format_iso($expRaw !== '' ? $expRaw : null), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td>
+                                    <?php if ($isUsed): ?>
+                                        <span class="badge-pill muted">Usado por <?= htmlspecialchars($usedByDisp, ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php elseif ($isExpired): ?>
+                                        <span class="badge-pill muted">Expirado</span>
+                                    <?php elseif ($st === 'revoked'): ?>
+                                        <span class="badge-pill muted">Revogado</span>
+                                    <?php else: ?>
+                                        <span class="badge-pill ok">Disponível</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <button type="button" class="btn-sm js-copy-code" data-code="<?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?>">📋 Copiar</button>
+                                    <?php if ($iid !== '' && $derivedAvail): ?>
+                                        <form method="post" action="" style="display:inline;margin-left:6px" onsubmit="return confirm('Excluir este convite?');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="return_tab" value="convites">
+                                            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                                            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                                            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                                            <input type="hidden" name="action" value="excluir_convite">
+                                            <input type="hidden" name="invite_id" value="<?= htmlspecialchars($iid, ENT_QUOTES, 'UTF-8') ?>">
+                                            <button type="submit" class="btn-sm btn-danger" title="Excluir">🗑 Excluir</button>
+                                        </form>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        <?php endif; ?>
 
-        if ($totalMembersPages > 1) {
-            $prevM = max(1, $mPage - 1);
-            $nextM = min($totalMembersPages, $mPage + 1);
-            ?>
-            <div class="pagination dark-card" style="max-width:960px;margin:12px auto 0;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:0.85rem;color:#888">
-                <span>Membros · Página <?= htmlspecialchars((string) $mPage, ENT_QUOTES, 'UTF-8') ?> / <?= htmlspecialchars((string) $totalMembersPages, ENT_QUOTES, 'UTF-8') ?></span>
+        <?php if ($tab === 'usuarios'): ?>
+        <section aria-label="Usuários">
+            <div class="panel-card">
+                <div style="margin-bottom:14px">
+                    <label for="userSearch" class="stat-label-dash" style="display:block;margin-bottom:6px;color:var(--muted);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em">Buscar</label>
+                    <input type="search" id="userSearch" class="dark-input" placeholder="display_id ou cidade…" autocomplete="off">
+                </div>
+                <div style="overflow-x:auto">
+                    <table class="data-table" id="usuariosTable">
+                        <thead>
+                            <tr>
+                                <th>Código</th>
+                                <th>Cidade</th>
+                                <th>Tipo</th>
+                                <th>Cadastro</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($members as $mem): ?>
+                            <?php
+                            $mid = isset($mem['id']) ? (string) $mem['id'] : '';
+                            $lbl = clLabel($mem);
+                            $role = isset($mem['role']) ? (string) $mem['role'] : 'membro';
+                            $cidade = isset($mem['cidade']) ? trim((string) $mem['cidade']) : '';
+                            $isSelf = ($mid !== '' && $mid === $current_user_id);
+                            $cadRow = isset($mem['created_at']) ? admin_format_iso((string) $mem['created_at']) : '—';
+                            $searchBlob = strtolower($lbl . ' ' . $cidade);
+                            ?>
+                            <tr data-search="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8') ?>">
+                                <td><span class="mono-code" style="font-size:0.95rem"><?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?></span></td>
+                                <td style="color:var(--muted)"><?= $cidade !== '' ? htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') : '—' ?></td>
+                                <td>
+                                    <?php if ($role === 'admin'): ?>
+                                        <span class="badge-pill admin">Admin</span>
+                                    <?php else: ?>
+                                        <span class="badge-pill membro">Membro</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td style="color:var(--muted);white-space:nowrap"><?= htmlspecialchars($cadRow, ENT_QUOTES, 'UTF-8') ?></td>
+                                <td>
+                                    <?php if ($isSelf && $role === 'admin'): ?>
+                                        <button type="button" class="btn-sm btn-danger" disabled title="Não é possível alterar o próprio papel">Remover Admin</button>
+                                    <?php elseif ($isSelf): ?>
+                                        <span style="color:var(--muted);font-size:0.8rem">—</span>
+                                    <?php elseif ($role !== 'admin'): ?>
+                                        <form method="post" action="" style="display:inline">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="return_tab" value="usuarios">
+                                            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                                            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                                            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                                            <input type="hidden" name="action" value="alterar_role">
+                                            <input type="hidden" name="target_user_id" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="nova_role" value="admin">
+                                            <button type="submit" class="btn-sm btn-purple">Tornar Admin</button>
+                                        </form>
+                                    <?php else: ?>
+                                        <form method="post" action="" style="display:inline">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="return_tab" value="usuarios">
+                                            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                                            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                                            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                                            <input type="hidden" name="action" value="alterar_role">
+                                            <input type="hidden" name="target_user_id" value="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="nova_role" value="membro">
+                                            <button type="submit" class="btn-sm btn-danger">Remover Admin</button>
+                                        </form>
+                                    <?php endif; ?>
+                                    <?php if (!$isSelf): ?>
+                                        <button type="button" class="btn-sm btn-excluir-dark js-open-delete-user"
+                                            data-user-id="<?= htmlspecialchars($mid, ENT_QUOTES, 'UTF-8') ?>"
+                                            data-display-id="<?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?>"
+                                            style="margin-left:6px">Excluir</button>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <?php if ($totalMembersPages > 1) {
+                $prevM = max(1, $mPage - 1);
+                $nextM = min($totalMembersPages, $mPage + 1);
+                ?>
+            <div class="panel-card" style="margin-top:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:0.85rem;color:var(--muted)">
+                <span>Usuários · Página <?= htmlspecialchars((string) $mPage, ENT_QUOTES, 'UTF-8') ?> / <?= htmlspecialchars((string) $totalMembersPages, ENT_QUOTES, 'UTF-8') ?></span>
                 <span>
                     <?php if ($mPage > 1): ?>
-                        <a class="dark-btn btn-action" style="text-decoration:none;display:inline-block" href="<?= htmlspecialchars(admin_page_url('members', $prevM, $pPage), ENT_QUOTES, 'UTF-8') ?>">← Anterior</a>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block" href="<?= htmlspecialchars(admin_page_url('usuarios', $prevM, $pPage, $stPage), ENT_QUOTES, 'UTF-8') ?>">← Anterior</a>
                     <?php endif; ?>
                     <?php if ($mPage < $totalMembersPages): ?>
-                        <a class="dark-btn btn-action" style="text-decoration:none;display:inline-block;margin-left:8px" href="<?= htmlspecialchars(admin_page_url('members', $nextM, $pPage), ENT_QUOTES, 'UTF-8') ?>">Próxima →</a>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:8px" href="<?= htmlspecialchars(admin_page_url('usuarios', $nextM, $pPage, $stPage), ENT_QUOTES, 'UTF-8') ?>">Próxima →</a>
                     <?php endif; ?>
                 </span>
             </div>
-            <?php
+            <?php } ?>
+        </section>
+        <?php endif; ?>
 
-        }
-        ?>
-    </section>
-
-    <!-- Posts -->
-    <section id="panel-posts" class="tab-panel<?= $tab === 'posts' ? ' is-active' : '' ?>" role="tabpanel" data-panel="posts" <?= $tab === 'posts' ? '' : 'hidden' ?>>
-        <div class="panel-inner dark-card" style="overflow-x:auto">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th></th>
-                        <th>Autor</th>
-                        <th>Legenda</th>
-                        <th>Data</th>
-                        <th>Ações</th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($posts as $post): ?>
-                    <?php
-
-                    $pid = isset($post['id']) ? (string) $post['id'] : '';
-                    $uid = isset($post['user_id']) ? (string) $post['user_id'] : '';
-                    $author = $uid !== '' && isset($memberMap[$uid]) ? $memberMap[$uid] : [];
-                    $authLbl = $author !== [] ? clLabel($author) : 'Membro';
-                    $img = isset($post['image_url']) ? trim((string) $post['image_url']) : '';
-                    $capShow = htmlspecialchars(admin_truncate_caption($post), ENT_QUOTES, 'UTF-8');
-                    $dt = admin_format_dt($post);
-                    ?>
-                    <tr>
-                        <td>
-                            <?php if ($img !== ''): ?>
-                                <img class="thumb-48" src="<?= htmlspecialchars($img, ENT_QUOTES, 'UTF-8') ?>" alt="">
-                            <?php else: ?>
-                                <span class="thumb-48" style="display:inline-flex;align-items:center;justify-content:center;font-size:1.2rem;background:#0A0A0A">🖼</span>
-                            <?php endif; ?>
-                        </td>
-                        <td><?= htmlspecialchars($authLbl, ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><div class="cap-cell" title="<?= $capShow ?>"><?= $capShow ?></div></td>
-                        <td style="white-space:nowrap;color:#888;font-size:0.8rem"><?= $dt ?></td>
-                        <td>
-                            <?php if ($pid !== '' && $uid !== ''): ?>
-                                <form method="post" action="" style="display:inline" onsubmit="return confirm('Remover este post?');">
+        <?php if ($tab === 'posts'): ?>
+        <section aria-label="Posts">
+            <div class="panel-card">
+                <h2 style="font-size:1rem;margin-bottom:14px;font-weight:600">Posts recentes</h2>
+                <?php if ($posts === []): ?>
+                    <p style="color:var(--muted);font-size:0.9rem">Nenhum post encontrado.</p>
+                <?php endif; ?>
+                <div class="posts-cards">
+                    <?php foreach ($posts as $post): ?>
+                        <?php
+                        $pid = isset($post['id']) ? (string) $post['id'] : '';
+                        $uid = isset($post['user_id']) ? (string) $post['user_id'] : '';
+                        $author = $uid !== '' && isset($memberMap[$uid]) ? $memberMap[$uid] : [];
+                        $authLbl = $author !== [] ? clLabel($author) : 'Membro';
+                        $capShow = htmlspecialchars(admin_truncate_caption($post), ENT_QUOTES, 'UTF-8');
+                        $dt = admin_format_dt($post);
+                        ?>
+                        <article class="post-admin-card">
+                            <div class="post-admin-meta">
+                                <span class="post-admin-author"><?= htmlspecialchars($authLbl, ENT_QUOTES, 'UTF-8') ?></span>
+                                <span class="post-admin-date"><?= $dt ?></span>
+                            </div>
+                            <p class="post-admin-snippet"><?= $capShow ?></p>
+                            <?php if ($pid !== ''): ?>
+                                <form method="post" action="" style="margin-top:4px" onsubmit="return confirm('Remover este post?');">
                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="return_tab" value="posts">
                                     <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
                                     <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                    <input type="hidden" name="action" value="delete_post">
-                                    <input type="hidden" name="pid" value="<?= htmlspecialchars($pid, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-action dark-btn" aria-label="Remover post">✕ Post</button>
-                                </form>
-                                <form method="post" action="" style="display:inline" onsubmit="return confirm('Apagar TODOS os posts deste usuário?');">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                    <input type="hidden" name="return_tab" value="posts">
-                                    <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                    <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                    <input type="hidden" name="action" value="delete_all_user_posts">
-                                    <input type="hidden" name="user_id" value="<?= htmlspecialchars($uid, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-action dark-btn" style="border-color:#553;color:#ff6b6b">🗑 Todos</button>
+                                    <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                                    <input type="hidden" name="action" value="excluir_post">
+                                    <input type="hidden" name="post_id" value="<?= htmlspecialchars($pid, ENT_QUOTES, 'UTF-8') ?>">
+                                    <button type="submit" class="btn-sm btn-danger">🗑 Excluir</button>
                                 </form>
                             <?php endif; ?>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <?php
-
-        if ($totalPostsPages > 1) {
-            $prevP = max(1, $pPage - 1);
-            $nextP = min($totalPostsPages, $pPage + 1);
-            ?>
-            <div class="pagination dark-card" style="max-width:960px;margin:12px auto 0;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:0.85rem;color:#888">
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <?php if ($totalPostsPages > 1) {
+                $prevP = max(1, $pPage - 1);
+                $nextP = min($totalPostsPages, $pPage + 1);
+                ?>
+            <div class="panel-card" style="margin-top:12px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:0.85rem;color:var(--muted)">
                 <span>Posts · Página <?= htmlspecialchars((string) $pPage, ENT_QUOTES, 'UTF-8') ?> / <?= htmlspecialchars((string) $totalPostsPages, ENT_QUOTES, 'UTF-8') ?></span>
                 <span>
                     <?php if ($pPage > 1): ?>
-                        <a class="dark-btn btn-action" style="text-decoration:none;display:inline-block" href="<?= htmlspecialchars(admin_page_url('posts', $mPage, $prevP), ENT_QUOTES, 'UTF-8') ?>">← Anterior</a>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block" href="<?= htmlspecialchars(admin_page_url('posts', $mPage, $prevP, $stPage), ENT_QUOTES, 'UTF-8') ?>">← Anterior</a>
                     <?php endif; ?>
                     <?php if ($pPage < $totalPostsPages): ?>
-                        <a class="dark-btn btn-action" style="text-decoration:none;display:inline-block;margin-left:8px" href="<?= htmlspecialchars(admin_page_url('posts', $mPage, $nextP), ENT_QUOTES, 'UTF-8') ?>">Próxima →</a>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:8px" href="<?= htmlspecialchars(admin_page_url('posts', $mPage, $nextP, $stPage), ENT_QUOTES, 'UTF-8') ?>">Próxima →</a>
                     <?php endif; ?>
                 </span>
             </div>
-            <?php
+            <?php } ?>
+        </section>
+        <?php endif; ?>
 
-        }
-        ?>
-    </section>
-
-    <!-- Convites -->
-    <section id="panel-invites" class="tab-panel<?= $tab === 'invites' ? ' is-active' : '' ?>" role="tabpanel" data-panel="invites" <?= $tab === 'invites' ? '' : 'hidden' ?>>
-        <div class="panel-inner dark-card">
-            <form method="post" action="">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="return_tab" value="invites">
-                <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                <input type="hidden" name="action" value="gen_invite">
-                <button type="submit" class="btn-gen dark-btn" style="border:none;background:#7B2EFF">＋ Gerar novo convite</button>
-            </form>
-            <div class="invite-grid">
-                <?php foreach ($invites as $inv): ?>
+        <?php if ($tab === 'stories'): ?>
+        <section aria-label="Stories">
+            <?php if ($stories === []): ?>
+                <p style="color:var(--muted);font-size:0.9rem">Nenhum story ativo no momento.</p>
+            <?php endif; ?>
+            <div class="stories-grid-adm">
+                <?php foreach ($stories as $story): ?>
                     <?php
-
-                    $ic = isset($inv['code']) ? (string) $inv['code'] : '';
-                    $st = isset($inv['status']) ? (string) $inv['status'] : '';
+                    $sid = isset($story['id']) ? (string) $story['id'] : '';
+                    $suid = isset($story['user_id']) ? (string) $story['user_id'] : '';
+                    $sauthor = $suid !== '' && isset($memberMap[$suid]) ? $memberMap[$suid] : [];
+                    $sauthLbl = $sauthor !== [] ? clLabel($sauthor) : 'Membro';
+                    $simg = isset($story['image_url']) ? trim((string) $story['image_url']) : '';
+                    $sdt = admin_format_dt($story);
                     ?>
-                    <div class="invite-card dark-card">
-                        <div>
-                            <span class="invite-code" data-copy="<?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?>" onclick="copyCode(this.dataset.copy, this)"><?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?></span>
-                            <div class="invite-hint">clique para copiar <span class="copy-feedback" style="display:none;color:#51cf66;font-weight:600"></span></div>
-                        </div>
-                        <div style="margin-top:10px;font-size:0.82rem;">
-                            <?php if ($st === 'available'): ?>
-                                <span class="st-ok" title="Disponível">✅ Disponível</span>
-                            <?php elseif ($st === 'used'): ?>
-                                <span class="st-used" title="Usado">✔ Usado</span>
-                            <?php elseif ($st === 'revoked'): ?>
-                                <span class="st-revoked" title="Revogado">✕ Revogado</span>
-                            <?php else: ?>
-                                <span class="st-used"><?= htmlspecialchars($st !== '' ? $st : '—', ENT_QUOTES, 'UTF-8') ?></span>
+                    <div class="story-cell">
+                        <?php if ($simg !== ''): ?>
+                            <img class="story-cell-img" src="<?= htmlspecialchars($simg, ENT_QUOTES, 'UTF-8') ?>" alt="">
+                        <?php else: ?>
+                            <div class="story-cell-img" style="display:flex;align-items:center;justify-content:center;font-size:2rem">📸</div>
+                        <?php endif; ?>
+                        <div class="story-cell-body">
+                            <div class="story-cell-row">
+                                <span style="font-weight:600;color:var(--gold)"><?= htmlspecialchars($sauthLbl, ENT_QUOTES, 'UTF-8') ?></span>
+                                <span style="color:var(--muted);font-size:0.78rem"><?= $sdt ?></span>
+                            </div>
+                            <?php if ($sid !== ''): ?>
+                                <form method="post" action="" onsubmit="return confirm('Remover este story?');">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="return_tab" value="stories">
+                                    <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                                    <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                                    <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                                    <input type="hidden" name="action" value="excluir_story">
+                                    <input type="hidden" name="story_id" value="<?= htmlspecialchars($sid, ENT_QUOTES, 'UTF-8') ?>">
+                                    <button type="submit" class="btn-sm btn-danger" style="width:100%">🗑 Excluir</button>
+                                </form>
                             <?php endif; ?>
                         </div>
-                        <?php if ($st === 'available' && $ic !== ''): ?>
-                            <form method="post" action="" onsubmit="return confirm('Revogar este convite?');">
-                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
-                                <input type="hidden" name="return_tab" value="invites">
-                                <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
-                                <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
-                                <input type="hidden" name="action" value="revoke_invite">
-                                <input type="hidden" name="code" value="<?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?>">
-                                <button type="submit" class="btn-revoke dark-btn">Revogar</button>
-                            </form>
-                        <?php endif; ?>
                     </div>
                 <?php endforeach; ?>
             </div>
-        </div>
-    </section>
+            <?php if ($totalStoriesPages > 1) {
+                $prevSt = max(1, $stPage - 1);
+                $nextSt = min($totalStoriesPages, $stPage + 1);
+                ?>
+            <div class="panel-card" style="margin-top:14px;padding:12px 14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:0.85rem;color:var(--muted)">
+                <span>Stories · Página <?= htmlspecialchars((string) $stPage, ENT_QUOTES, 'UTF-8') ?> / <?= htmlspecialchars((string) $totalStoriesPages, ENT_QUOTES, 'UTF-8') ?></span>
+                <span>
+                    <?php if ($stPage > 1): ?>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block" href="<?= htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $prevSt), ENT_QUOTES, 'UTF-8') ?>">← Anterior</a>
+                    <?php endif; ?>
+                    <?php if ($stPage < $totalStoriesPages): ?>
+                        <a class="btn-sm" style="text-decoration:none;display:inline-block;margin-left:8px" href="<?= htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $nextSt), ENT_QUOTES, 'UTF-8') ?>">Próxima →</a>
+                    <?php endif; ?>
+                </span>
+            </div>
+            <?php } ?>
+        </section>
+        <?php endif; ?>
 
-    <script>
-    (function () {
-        var initialTab = <?= json_encode($tab, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
-        switchTab(initialTab);
+    </div>
+</div>
 
-        var search = document.getElementById('memberSearch');
-        if (search) {
-            search.addEventListener('input', function () {
-                var q = (this.value || '').toLowerCase().trim();
-                var rows = document.querySelectorAll('#membersTable tbody tr');
-                rows.forEach(function (tr) {
-                    var hay = (tr.getAttribute('data-search') || '').toLowerCase();
-                    tr.style.display = (q === '' || hay.indexOf(q) !== -1) ? '' : 'none';
+<div id="modal-excluir-usuario" class="admin-modal" aria-hidden="true" role="dialog" aria-labelledby="modal-del-title">
+    <div class="admin-modal-overlay js-close-modal" tabindex="-1"></div>
+    <div class="admin-modal-card">
+        <p id="modal-del-msg"></p>
+        <form id="form-excluir-usuario" method="post" action="">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+            <input type="hidden" name="return_tab" value="usuarios">
+            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+            <input type="hidden" name="action" value="excluir_usuario">
+            <input type="hidden" name="target_user_id" id="modal_target_user_id" value="">
+            <div class="admin-modal-actions">
+                <button type="button" class="btn-modal-cancel js-close-modal">Cancelar</button>
+                <button type="submit" class="btn-modal-ok">Confirmar exclusão</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    var toggle = document.getElementById('sidebarToggle');
+    var sidebar = document.getElementById('adminSidebar');
+    if (toggle && sidebar) {
+        toggle.addEventListener('click', function () {
+            document.body.classList.toggle('sidebar-open');
+        });
+        sidebar.querySelectorAll('a').forEach(function (a) {
+            a.addEventListener('click', function () {
+                document.body.classList.remove('sidebar-open');
+            });
+        });
+    }
+
+    var userSearch = document.getElementById('userSearch');
+    if (userSearch) {
+        userSearch.addEventListener('input', function () {
+            var q = (this.value || '').toLowerCase().trim();
+            document.querySelectorAll('#usuariosTable tbody tr').forEach(function (tr) {
+                var hay = (tr.getAttribute('data-search') || '').toLowerCase();
+                tr.style.display = (q === '' || hay.indexOf(q) !== -1) ? '' : 'none';
+            });
+        });
+    }
+
+    document.querySelectorAll('.js-copy-code').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var code = btn.getAttribute('data-code') || '';
+            if (!code) return;
+            function ok() { btn.textContent = '✓ Copiado'; setTimeout(function () { btn.textContent = '📋 Copiar'; }, 1400); }
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(ok).catch(function () {
+                    window.prompt('Copie o código:', code);
                 });
-            });
-        }
-    })();
-
-    function switchTab(name) {
-        var tabs = document.querySelectorAll('.tab-btn');
-        var panels = document.querySelectorAll('.tab-panel');
-        tabs.forEach(function (btn) {
-            var t = btn.getAttribute('data-tab');
-            var on = t === name;
-            btn.classList.toggle('is-active', on);
-            btn.setAttribute('aria-selected', on ? 'true' : 'false');
-        });
-        panels.forEach(function (p) {
-            var pn = p.getAttribute('data-panel');
-            var on = pn === name;
-            p.classList.toggle('is-active', on);
-            if (on) { p.removeAttribute('hidden'); } else { p.setAttribute('hidden', 'hidden'); }
-        });
-    }
-
-    function copyCode(code, el) {
-        if (!code) return;
-        var hint = el && el.parentElement ? el.parentElement.querySelector('.copy-feedback') : null;
-        function showOk() {
-            if (hint) { hint.style.display = 'inline'; hint.textContent = '✓ Copiado!'; }
-            setTimeout(function () {
-                if (hint) { hint.style.display = 'none'; hint.textContent = ''; }
-            }, 1500);
-        }
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(code).then(showOk).catch(function () {
+            } else {
                 window.prompt('Copie o código:', code);
-            });
-        } else {
-            window.prompt('Copie o código:', code);
-        }
+            }
+        });
+    });
+
+    var modal = document.getElementById('modal-excluir-usuario');
+    var modalMsg = document.getElementById('modal-del-msg');
+    var modalUid = document.getElementById('modal_target_user_id');
+    function closeModal() {
+        if (!modal) return;
+        modal.classList.remove('is-open');
+        modal.setAttribute('aria-hidden', 'true');
     }
-    </script>
+    if (modal) {
+        modal.querySelectorAll('.js-close-modal').forEach(function (el) {
+            el.addEventListener('click', closeModal);
+        });
+    }
+    document.querySelectorAll('.js-open-delete-user').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var did = btn.getAttribute('data-display-id') || '';
+            var uid = btn.getAttribute('data-user-id') || '';
+            if (!modal || !modalMsg || !modalUid) return;
+            modalMsg.textContent = 'Tem certeza que deseja excluir o usuário ' + did + '? Esta ação não pode ser desfeita.';
+            modalUid.value = uid;
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+        });
+    });
+})();
+</script>
 </body>
 </html>

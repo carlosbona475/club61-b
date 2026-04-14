@@ -52,58 +52,98 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     }
 }
 
+$invite_id = null;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-        $url = SUPABASE_URL . '/rest/v1/invites?code=eq.' . urlencode($invite_code) . '&status=eq.available';
-
-        $ch = curl_init($url);
-
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_HTTPHEADER, [
-            'apikey: ' . SUPABASE_ANON_KEY,
-        ]);
-
-        $response = curl_exec($ch);
-        curl_close($ch);
-
-        $invite = json_decode($response, true);
-        if (!is_array($invite)) {
-            $invite = [];
-        }
-
-        if (empty($invite)) {
-            $errorMessage = 'Convite inválido ou já utilizado';
-        }
+    if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+        $errorMessage = 'Serviço de convites indisponível (SUPABASE_SERVICE_KEY).';
+    }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-        // Signup no Supabase
-        $result = registerUser($email, $password);
+    $invite_code_norm = strtoupper(preg_replace('/\s+/', '', (string) $invite_code));
+    $nowIso = gmdate('Y-m-d\TH:i:s\Z');
+    $q = '/rest/v1/invites?code=eq.' . rawurlencode($invite_code_norm)
+        . '&used_by=is.null'
+        . '&expires_at=gt.' . rawurlencode($nowIso);
+    $url = SUPABASE_URL . $q;
 
-        if ($result['success']) {
-            $chUpd = curl_init(SUPABASE_URL . '/rest/v1/invites?code=eq.' . urlencode($invite_code));
+    $ch = curl_init($url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, [
+        'apikey: ' . SUPABASE_SERVICE_KEY,
+        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+        'Accept: application/json',
+    ]);
+
+    $response = curl_exec($ch);
+    $httpInv = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+
+    $invite = [];
+    if ($response !== false && $httpInv >= 200 && $httpInv < 300) {
+        $decoded = json_decode((string) $response, true);
+        $invite = is_array($decoded) ? $decoded : [];
+    }
+
+    if ($invite === []) {
+        $errorMessage = 'Convite inválido, já utilizado ou expirado.';
+    } else {
+        $invite_id = isset($invite[0]['id']) ? $invite[0]['id'] : null;
+        if ($invite_id === null || $invite_id === '') {
+            $errorMessage = 'Convite inválido, já utilizado ou expirado.';
+        }
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
+    $result = registerUser($email, $password);
+
+    if ($result['success']) {
+        $newUserId = isset($result['user_id']) ? trim((string) $result['user_id']) : '';
+        if ($newUserId === '') {
+            $errorMessage = 'Conta criada, mas não foi possível obter o ID do usuário. Contacte o suporte.';
+        } elseif ($invite_id !== null) {
+            $usedAt = gmdate('Y-m-d\TH:i:s\Z');
+            $patchBody = [
+                'used_by' => $newUserId,
+                'used_at' => $usedAt,
+            ];
+            if (isset($invite[0]['status'])) {
+                $patchBody['status'] = 'used';
+            }
+            $patchUrl = SUPABASE_URL . '/rest/v1/invites?id=eq.' . rawurlencode((string) $invite_id);
+            $chUpd = curl_init($patchUrl);
             curl_setopt_array($chUpd, [
                 CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_CUSTOMREQUEST  => 'PATCH',
+                CURLOPT_CUSTOMREQUEST => 'PATCH',
                 CURLOPT_SSL_VERIFYPEER => false,
                 CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_POSTFIELDS     => json_encode(['status' => 'used']),
-                CURLOPT_HTTPHEADER     => [
-                    'apikey: '         . SUPABASE_SERVICE_KEY,
+                CURLOPT_POSTFIELDS => json_encode($patchBody, JSON_UNESCAPED_SLASHES),
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_SERVICE_KEY,
                     'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
                     'Content-Type: application/json',
                     'Prefer: return=minimal',
                 ],
             ]);
             curl_exec($chUpd);
+            $patchCode = (int) curl_getinfo($chUpd, CURLINFO_HTTP_CODE);
             curl_close($chUpd);
+            if ($patchCode < 200 || $patchCode >= 300) {
+                $errorMessage = 'Conta criada, mas o convite não foi marcado como usado. Peça ajuda a um administrador.';
+            }
+        }
 
+        if ($errorMessage === '') {
             header('Location: /features/auth/login.php');
             exit;
         }
-
+    } else {
         $errorMessage = $result['error'] ?? 'Nao foi possivel criar a conta.';
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -244,7 +284,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
                 <?= csrf_field() ?>
                 <div class="field">
                     <label for="invite_code">Código de convite</label>
-                    <input type="text" id="invite_code" name="invite_code" placeholder="Cole seu código" autocomplete="off" required />
+                    <input type="text" id="invite_code" name="invite_code" placeholder="Cole seu código aqui" autocomplete="off" required />
                 </div>
                 <div class="field">
                     <label for="email">E-mail</label>

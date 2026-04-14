@@ -31,6 +31,7 @@ $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 // Defaults
 $bio = '';
 $ageVal = '';
+$cidade = '';
 $rel = '';
 $avatarUrl = '';
 $isPrivate = false;
@@ -57,6 +58,7 @@ if (supabase_service_role_available()) {
             if (isset($p['age']) && $p['age'] !== null && $p['age'] !== '') {
                 $ageVal = (string) (int) $p['age'];
             }
+            $cidade = isset($p['cidade']) && $p['cidade'] !== null ? trim((string) $p['cidade']) : '';
             $rel = isset($p['relationship_status']) ? strtolower(trim((string) $p['relationship_status'])) : '';
             $avatarUrl = isset($p['avatar_url']) ? trim((string) $p['avatar_url']) : '';
             if (isset($p['is_private'])) {
@@ -168,6 +170,8 @@ $relLower = $rel;
                         <textarea id="bio-s" name="bio" maxlength="2000" placeholder="Uma linha sobre você"><?= htmlspecialchars($bio, ENT_QUOTES, 'UTF-8') ?></textarea>
                         <label for="age-s">Idade</label>
                         <input id="age-s" type="number" name="age" min="18" max="120" placeholder="Ex.: 32" value="<?= htmlspecialchars($ageVal, ENT_QUOTES, 'UTF-8') ?>">
+                        <label for="cid-s">Cidade</label>
+                        <input id="cid-s" type="text" name="cidade" maxlength="120" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Ex.: São Paulo">
                         <label for="rel-s">Relacionamento</label>
                         <select id="rel-s" name="relationship_status" required>
                             <option value="" disabled<?= $relLower === '' ? ' selected' : '' ?>>Selecione…</option>

@@ -14,6 +14,7 @@ header('Content-Type: application/json; charset=utf-8');
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
@@ -134,7 +135,7 @@ $cid = is_array($row) && isset($row['id']) ? (string) $row['id'] : null;
 
 $prof = feed_fetch_profiles_by_ids([(string) $userId]);
 $u = $prof[$userId] ?? [];
-$display = $u['display_id'] ?? $u['username'] ?? 'Membro';
+$display = club61_display_id_label(isset($u['display_id']) ? (string) $u['display_id'] : null);
 
 $html = feed_render_comment_line_html($cid, (string) $display, $comment);
 

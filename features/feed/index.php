@@ -17,23 +17,9 @@ $onlineUsers = [];
 if (!class_exists('FeedFormatting')) {
     final class FeedFormatting
     {
-        public static function buildClLabel(string $disp, string $fallback = ''): string
+        public static function buildClLabel(string $disp, string $unused = ''): string
         {
-            if ($disp === '') {
-                return $fallback;
-            }
-            $num = null;
-            if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-                $num = (int) $m[1];
-            } else {
-                $digits = preg_replace('/\D/', '', $disp);
-                if ($digits !== '') {
-                    $num = (int) $digits;
-                }
-            }
-            return ($num !== null && $num > 0)
-                ? 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT)
-                : $fallback;
+            return club61_display_id_label($disp);
         }
 
         public static function relativeTime(?string $iso): string
@@ -122,7 +108,7 @@ if ($access_token !== '' && supabase_service_role_available()) {
     }
     if ($orderedUserIds !== []) {
         $inList = implode(',', $orderedUserIds);
-        $spUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,username,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
+        $spUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
         $chSp = curl_init($spUrl);
         curl_setopt_array($chSp, [
             CURLOPT_RETURNTRANSFER => true,
@@ -186,7 +172,7 @@ $postAuthorIdList = array_keys($postAuthorIds);
 if ($postAuthorIdList !== [] && $access_token !== '') {
     $postAuthorById = [];
     $inList = implode(',', $postAuthorIdList);
-    $apUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,username,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
+    $apUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
     $chAp = curl_init($apUrl);
     curl_setopt_array($chAp, [
         CURLOPT_RETURNTRANSFER => true,

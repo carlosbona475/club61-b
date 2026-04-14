@@ -24,7 +24,7 @@ function admin_fetch_profile_row_by_id(string $userId): ?array
         return null;
     }
 
-    $url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,username,role,status';
+    $url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,role,status';
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [

@@ -29,19 +29,15 @@ $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
 // Defaults
-$displayName = '';
 $bio = '';
 $ageVal = '';
-$tipo = '';
-$cidade = '';
 $rel = '';
-$partnerAge = '';
 $avatarUrl = '';
 $isPrivate = false;
 $messagePermission = 'all';
 
 if (supabase_service_role_available()) {
-    $sel = 'display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name,is_private,message_permission';
+    $sel = CLUB61_PROFILE_REST_SELECT;
     $url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profileUserId) . '&select=' . rawurlencode($sel);
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -57,17 +53,11 @@ if (supabase_service_role_available()) {
         $rows = json_decode($body, true);
         if (is_array($rows) && isset($rows[0]) && is_array($rows[0])) {
             $p = $rows[0];
-            $displayName = isset($p['display_name']) && $p['display_name'] !== null ? trim((string) $p['display_name']) : '';
             $bio = isset($p['bio']) && $p['bio'] !== null ? trim((string) $p['bio']) : '';
             if (isset($p['age']) && $p['age'] !== null && $p['age'] !== '') {
                 $ageVal = (string) (int) $p['age'];
             }
-            $tipo = isset($p['tipo']) ? trim((string) $p['tipo']) : '';
-            $cidade = isset($p['cidade']) ? trim((string) $p['cidade']) : '';
-            $rel = isset($p['relationship_type']) ? strtolower(trim((string) $p['relationship_type'])) : '';
-            if (isset($p['partner_age']) && $p['partner_age'] !== null && $p['partner_age'] !== '') {
-                $partnerAge = (string) (int) $p['partner_age'];
-            }
+            $rel = isset($p['relationship_status']) ? strtolower(trim((string) $p['relationship_status'])) : '';
             $avatarUrl = isset($p['avatar_url']) ? trim((string) $p['avatar_url']) : '';
             if (isset($p['is_private'])) {
                 $isPrivate = (bool) $p['is_private'];
@@ -79,10 +69,7 @@ if (supabase_service_role_available()) {
     }
 }
 
-$tiposValidos = ['Homem', 'Mulher', 'Casal'];
-$tipoSel = in_array($tipo, $tiposValidos, true) ? $tipo : '';
 $relLower = $rel;
-$showPartnerAge = ($relLower === 'casal' || $relLower === 'couple');
 
 ?>
 <!DOCTYPE html>
@@ -145,8 +132,6 @@ $showPartnerAge = ($relLower === 'casal' || $relLower === 'couple');
         .modal-box { background: #161616; border: 1px solid #333; border-radius: 12px; padding: 24px; max-width: 400px; width: 100%; }
         .modal-box h3 { margin: 0 0 12px; color: #C9A84C; font-size: 1rem; }
         .modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; flex-wrap: wrap; }
-        #partner-age-wrap-set { display: none; }
-        #partner-age-wrap-set.is-on { display: block; }
     </style>
 </head>
 <body>
@@ -179,14 +164,12 @@ $showPartnerAge = ($relLower === 'casal' || $relLower === 'couple');
                     <form action="/features/profile/update_profile.php" method="post" autocomplete="on">
                         <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="return_to" value="/features/profile/settings.php">
-                        <label for="dn">Nome de exibição</label>
-                        <input id="dn" type="text" name="display_name" maxlength="100" value="<?= htmlspecialchars($displayName, ENT_QUOTES, 'UTF-8') ?>" placeholder="Como quer ser chamado">
                         <label for="bio-s">Bio</label>
                         <textarea id="bio-s" name="bio" maxlength="2000" placeholder="Uma linha sobre você"><?= htmlspecialchars($bio, ENT_QUOTES, 'UTF-8') ?></textarea>
                         <label for="age-s">Idade</label>
                         <input id="age-s" type="number" name="age" min="18" max="120" placeholder="Ex.: 32" value="<?= htmlspecialchars($ageVal, ENT_QUOTES, 'UTF-8') ?>">
                         <label for="rel-s">Relacionamento</label>
-                        <select id="rel-s" name="relationship_type" required>
+                        <select id="rel-s" name="relationship_status" required>
                             <option value="" disabled<?= $relLower === '' ? ' selected' : '' ?>>Selecione…</option>
                             <option value="solteiro"<?= $relLower === 'solteiro' || $relLower === 'single' ? ' selected' : '' ?>>Solteiro</option>
                             <option value="namorando"<?= $relLower === 'namorando' ? ' selected' : '' ?>>Namorando</option>
@@ -196,19 +179,6 @@ $showPartnerAge = ($relLower === 'casal' || $relLower === 'couple');
                             <option value="casal"<?= $relLower === 'casal' || $relLower === 'couple' ? ' selected' : '' ?>>Casal</option>
                             <option value="casada"<?= $relLower === 'casada' ? ' selected' : '' ?>>Casada</option>
                         </select>
-                        <div id="partner-age-wrap-set" class="<?= $showPartnerAge ? 'is-on' : '' ?>">
-                            <label for="pa-s">Idade do(a) parceiro(a)</label>
-                            <input id="pa-s" type="number" name="partner_age" min="18" max="120" value="<?= htmlspecialchars($partnerAge, ENT_QUOTES, 'UTF-8') ?>">
-                        </div>
-                        <label for="tipo-s">Tipo</label>
-                        <select id="tipo-s" name="tipo" required>
-                            <option value="" disabled<?= $tipoSel === '' ? ' selected' : '' ?>>Selecione…</option>
-                            <option value="Homem"<?= $tipoSel === 'Homem' ? ' selected' : '' ?>>Homem</option>
-                            <option value="Mulher"<?= $tipoSel === 'Mulher' ? ' selected' : '' ?>>Mulher</option>
-                            <option value="Casal"<?= $tipoSel === 'Casal' ? ' selected' : '' ?>>Casal</option>
-                        </select>
-                        <label for="cid-s">Cidade</label>
-                        <input id="cid-s" type="text" name="cidade" maxlength="120" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Sua cidade">
                         <button type="submit" class="btn">Salvar</button>
                     </form>
                 </div>
@@ -295,16 +265,6 @@ $showPartnerAge = ($relLower === 'casal' || $relLower === 'couple');
         tabs.forEach(function (b) {
             b.addEventListener('click', function () { show(b.getAttribute('data-tab')); });
         });
-        var rel = document.getElementById('rel-s');
-        var pw = document.getElementById('partner-age-wrap-set');
-        function syncP() {
-            if (!rel || !pw) return;
-            pw.classList.toggle('is-on', rel.value === 'casal');
-        }
-        if (rel) {
-            rel.addEventListener('change', syncP);
-            syncP();
-        }
         var md = document.getElementById('modal-del');
         document.getElementById('btn-del-account').addEventListener('click', function () { md.classList.add('is-open'); });
         document.getElementById('modal-del-cancel').addEventListener('click', function () { md.classList.remove('is-open'); });

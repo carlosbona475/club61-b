@@ -235,8 +235,7 @@ a{color:inherit}
       $sLastSeen = isset($sp['last_seen']) ? (string) $sp['last_seen'] : null;
       $sOnline = isUserOnline($sLastSeen);
       $sdisp = isset($sp['display_id']) ? trim((string) $sp['display_id']) : '';
-      $suname = isset($sp['username']) ? trim((string) $sp['username']) : '';
-      $scl = FeedFormatting::buildClLabel($sdisp, $suname !== '' ? '@' . $suname : '');
+      $scl = FeedFormatting::buildClLabel($sdisp);
       if ($sid === '') {
           continue;
       }
@@ -269,8 +268,7 @@ a{color:inherit}
       $authorId = isset($post['user_id']) ? (string) $post['user_id'] : '';
       $prof = $authorId !== '' && isset($postAuthorById[$authorId]) ? $postAuthorById[$authorId] : null;
       $pdisp = $prof && isset($prof['display_id']) ? trim((string) $prof['display_id']) : '';
-      $puname = $prof && isset($prof['username']) ? trim((string) $prof['username']) : '';
-      $authorLabel = FeedFormatting::buildClLabel($pdisp, $puname !== '' ? '@' . $puname : 'Membro');
+      $authorLabel = FeedFormatting::buildClLabel($pdisp);
       $pavatar = $prof && !empty($prof['avatar_url']) ? trim((string) $prof['avatar_url']) : '';
       $pLastSeen = $prof && isset($prof['last_seen']) ? (string) $prof['last_seen'] : null;
       $pOnline = isUserOnline($pLastSeen);
@@ -320,8 +318,7 @@ a{color:inherit}
           $cuid = isset($cr['user_id']) ? (string) $cr['user_id'] : '';
             $cpr = $cuid !== '' && isset($commentProfiles[$cuid]) ? $commentProfiles[$cuid] : null;
             $cdisp = $cpr && isset($cpr['display_id']) ? trim((string) $cpr['display_id']) : '';
-            $cuname = $cpr && isset($cpr['username']) ? trim((string) $cpr['username']) : '';
-            $clab = $cdisp !== '' ? $cdisp : ($cuname !== '' ? '@' . $cuname : 'Membro');
+            $clab = FeedFormatting::buildClLabel($cdisp);
             $ctxt = isset($cr['comment_text']) ? (string) $cr['comment_text'] : '';
           ?>
         <div class="comment-line" data-comment-id="<?= htmlspecialchars(isset($cr['id']) ? (string) $cr['id'] : '', ENT_QUOTES, 'UTF-8') ?>">

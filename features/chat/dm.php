@@ -50,26 +50,8 @@ function chat_dm_headers(bool $json = false): array
 function dmClLabel(array $author): string
 {
     $disp = isset($author['display_id']) ? trim((string) $author['display_id']) : '';
-    $uname = isset($author['username']) ? trim((string) $author['username']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            return 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
-    }
-    if ($uname !== '') {
-        return '@' . $uname;
-    }
 
-    return 'Membro';
+    return club61_display_id_label($disp);
 }
 
 function dm_date_key(?string $iso): string
@@ -213,7 +195,7 @@ if ($rawM !== false && $codeM >= 200 && $codeM < 300) {
     }
 }
 
-$profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . rawurlencode($other_id) . '&select=id,display_id,username,avatar_url,last_seen';
+$profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . rawurlencode($other_id) . '&select=id,display_id,avatar_url,last_seen';
 $chPr = curl_init($profUrl);
 curl_setopt_array($chPr, [
     CURLOPT_RETURNTRANSFER => true,

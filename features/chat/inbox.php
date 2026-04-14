@@ -35,26 +35,8 @@ function chat_inbox_headers(bool $json = false): array
 function clLabelInbox(array $author): string
 {
     $disp = isset($author['display_id']) ? trim((string) $author['display_id']) : '';
-    $uname = isset($author['username']) ? trim((string) $author['username']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            return 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
-    }
-    if ($uname !== '') {
-        return '@' . $uname;
-    }
 
-    return 'Membro';
+    return club61_display_id_label($disp);
 }
 
 function timeAgo(?string $iso): string
@@ -146,7 +128,7 @@ $otherIds = array_column($convosList, 'other_id');
 $profilesById = [];
 if ($otherIds !== []) {
     $inList = implode(',', $otherIds);
-    $pUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,username,avatar_url,last_seen&id=in.(' . $inList . ')';
+    $pUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
     $chP = curl_init($pUrl);
     curl_setopt_array($chP, [
         CURLOPT_RETURNTRANSFER => true,
@@ -171,7 +153,7 @@ if ($otherIds !== []) {
 }
 
 $allMembers = [];
-$mUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,username,avatar_url,last_seen&order=display_id.asc&limit=100';
+$mUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&order=display_id.asc&limit=100';
 $chM = curl_init($mUrl);
 curl_setopt_array($chM, [
     CURLOPT_RETURNTRANSFER => true,

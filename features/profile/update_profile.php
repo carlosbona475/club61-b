@@ -58,36 +58,17 @@ if (!supabase_service_role_available()) {
 
 $userId = (string) $userId;
 
-$allowedTipo = ['Homem', 'Mulher', 'Casal'];
 $allowedRel = ['solteiro', 'solteira', 'casal', 'casado', 'casada', 'namorando', 'prefiro_nao_dizer'];
-$tipo = isset($_POST['tipo']) ? trim((string) $_POST['tipo']) : '';
-$cidade = isset($_POST['cidade']) ? trim((string) $_POST['cidade']) : '';
 $bio = isset($_POST['bio']) ? trim((string) $_POST['bio']) : '';
-$displayName = isset($_POST['display_name']) ? trim((string) $_POST['display_name']) : '';
 $ageStr = isset($_POST['age']) ? trim((string) $_POST['age']) : '';
-$relationshipType = isset($_POST['relationship_type']) ? strtolower(trim((string) $_POST['relationship_type'])) : '';
-$partnerAgeStr = isset($_POST['partner_age']) ? trim((string) $_POST['partner_age']) : '';
-
-if ($tipo === '' || !in_array($tipo, $allowedTipo, true)) {
-    club61_profile_err('Selecione um tipo válido (Homem, Mulher ou Casal).');
-}
-
-$cidadeLen = function_exists('mb_strlen') ? mb_strlen($cidade, 'UTF-8') : strlen($cidade);
-if ($cidadeLen > 120) {
-    club61_profile_err('Cidade muito longa (máximo 120 caracteres).');
-}
-
-$dnLen = function_exists('mb_strlen') ? mb_strlen($displayName, 'UTF-8') : strlen($displayName);
-if ($dnLen > 100) {
-    club61_profile_err('Nome de exibição muito longo (máximo 100 caracteres).');
-}
+$relationshipStatus = isset($_POST['relationship_status']) ? strtolower(trim((string) $_POST['relationship_status'])) : '';
 
 $bioLen = function_exists('mb_strlen') ? mb_strlen($bio, 'UTF-8') : strlen($bio);
 if ($bioLen > 2000) {
     club61_profile_err('Bio muito longa.');
 }
 
-if ($relationshipType === '' || !in_array($relationshipType, $allowedRel, true)) {
+if ($relationshipStatus === '' || !in_array($relationshipStatus, $allowedRel, true)) {
     club61_profile_err('Selecione o tipo de relacionamento.');
 }
 
@@ -99,17 +80,6 @@ if ($ageStr !== '') {
     $age = (int) $ageStr;
     if ($age < 18 || $age > 120) {
         club61_profile_err('Idade deve estar entre 18 e 120.');
-    }
-}
-
-$partnerAge = null;
-if ($relationshipType === 'casal') {
-    if ($partnerAgeStr === '' || !ctype_digit($partnerAgeStr)) {
-        club61_profile_err('Informe a idade do(a) parceiro(a).');
-    }
-    $partnerAge = (int) $partnerAgeStr;
-    if ($partnerAge < 18 || $partnerAge > 120) {
-        club61_profile_err('Idade do parceiro(a) inválida.');
     }
 }
 
@@ -145,7 +115,6 @@ function club61_redirect_profile_error(string $ctx, string $detail): void
     exit;
 }
 
-// Todas as chamadas REST usam service_role (apikey + Authorization Bearer) — não usar JWT da sessão.
 $sk = SUPABASE_SERVICE_KEY;
 $headersGetService = [
     'apikey: ' . $sk,
@@ -159,8 +128,7 @@ $headersWriteService = [
     'Prefer: return=minimal',
 ];
 
-// 1) GET — verificar se o registro existe
-$getUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,tipo,cidade,display_id,bio,age,relationship_type,partner_age,display_name';
+$getUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
 $ch = curl_init($getUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -180,21 +148,14 @@ if (!is_array($existingRows)) {
     $existingRows = [];
 }
 
-$count = countProfilesTotalUsingServiceRole();
-$display_id = 'CL' . str_pad((string) ($count + 1), 2, '0', STR_PAD_LEFT);
+$payload = [
+    'bio' => $bio,
+    'age' => $age,
+    'relationship_status' => $relationshipStatus,
+];
 
 if (!empty($existingRows)) {
-    // PATCH
     $patchUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId);
-    $payload = [
-        'tipo' => $tipo,
-        'cidade' => $cidade,
-        'bio' => $bio,
-        'display_name' => $displayName === '' ? null : $displayName,
-        'age' => $age,
-        'relationship_type' => $relationshipType,
-        'partner_age' => $relationshipType === 'casal' ? $partnerAge : null,
-    ];
     $ch = curl_init($patchUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -212,28 +173,13 @@ if (!empty($existingRows)) {
         club61_redirect_profile_error('PATCH perfil', club61_supabase_error_message($patchBody !== false ? $patchBody : null, $patchCode));
     }
 } else {
-    // POST — inserir
+    $count = countProfilesTotalUsingServiceRole();
     $role = $count === 0 ? 'admin' : 'member';
 
-    $username = '';
-    if (!empty($_SESSION['user_email'])) {
-        $parts = explode('@', (string) $_SESSION['user_email'], 2);
-        $username = $parts[0];
-    }
-
-    $insertPayload = [
+    $insertPayload = array_merge([
         'id' => $userId,
-        'username' => $username,
         'role' => $role,
-        'display_id' => $display_id,
-        'tipo' => $tipo,
-        'cidade' => $cidade,
-        'bio' => $bio,
-        'display_name' => $displayName === '' ? null : $displayName,
-        'age' => $age,
-        'relationship_type' => $relationshipType,
-        'partner_age' => $relationshipType === 'casal' ? $partnerAge : null,
-    ];
+    ], $payload);
 
     $ch = curl_init(SUPABASE_URL . '/rest/v1/profiles');
     curl_setopt_array($ch, [
@@ -253,8 +199,7 @@ if (!empty($existingRows)) {
     }
 }
 
-// 2) GET — confirmar persistência
-$verifyUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=tipo,cidade,bio,age,relationship_type,partner_age,display_name';
+$verifyUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=bio,age,relationship_status';
 $ch = curl_init($verifyUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -275,24 +220,21 @@ if (!is_array($verifyRows) || $verifyRows === []) {
 }
 
 $v = $verifyRows[0];
-$vTipo = isset($v['tipo']) ? trim((string) $v['tipo']) : '';
-$vCidade = isset($v['cidade']) ? trim((string) $v['cidade']) : '';
 $vBio = isset($v['bio']) && $v['bio'] !== null ? trim((string) $v['bio']) : '';
-$vRel = isset($v['relationship_type']) && $v['relationship_type'] !== null ? strtolower(trim((string) $v['relationship_type'])) : '';
-$vDispName = isset($v['display_name']) && $v['display_name'] !== null ? trim((string) $v['display_name']) : '';
+$vRel = isset($v['relationship_status']) && $v['relationship_status'] !== null ? strtolower(trim((string) $v['relationship_status'])) : '';
+$vAge = isset($v['age']) && $v['age'] !== null && $v['age'] !== '' ? (int) $v['age'] : null;
 
-if ($vTipo !== $tipo || $vCidade !== $cidade || $vRel !== $relationshipType) {
+if ($vRel !== $relationshipStatus) {
     club61_redirect_profile_error(
         'Validação',
-        'tipo/cidade/relacionamento divergentes após salvar.'
+        'Relacionamento não persistido como esperado.'
     );
 }
 if ($vBio !== $bio) {
     club61_redirect_profile_error('Validação', 'Bio não persistida como esperado.');
 }
-$expectDisp = $displayName === '' ? '' : $displayName;
-if ($vDispName !== $expectDisp) {
-    club61_redirect_profile_error('Validação', 'Nome de exibição não persistido como esperado.');
+if ($vAge !== $age) {
+    club61_redirect_profile_error('Validação', 'Idade não persistida como esperado.');
 }
 
 $okBase = $returnTo ?? '/features/profile/index.php';

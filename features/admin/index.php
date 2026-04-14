@@ -240,27 +240,7 @@ function admin_redirect_prg(string $tab, string $message = '', string $level = '
  */
 function clLabel(array $p): string
 {
-    $disp = isset($p['display_id']) ? trim((string) $p['display_id']) : '';
-    $uname = isset($p['username']) ? trim((string) $p['username']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            return 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
-    }
-    if ($uname !== '') {
-        return '@' . $uname;
-    }
-
-    return 'Membro';
+    return club61_display_id_label(isset($p['display_id']) ? (string) $p['display_id'] : null);
 }
 
 // ---------------------------------------------------------------------------
@@ -389,7 +369,7 @@ $new_members_today = admin_count_exact('/rest/v1/profiles?select=id&created_at=g
 $totalInvitesAvailable = admin_count_exact('/rest/v1/invites?select=id&status=eq.available');
 $totalAdmins = admin_count_exact('/rest/v1/profiles?select=id&role=eq.admin');
 
-$membersPath = '/rest/v1/profiles?select=id,display_id,username,avatar_url,role,tipo,cidade,status,created_at'
+$membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at'
     . '&order=created_at.asc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetMembers;
 $members = admin_json_get_list($membersPath);
 
@@ -417,7 +397,7 @@ foreach ($posts as $pr) {
 $missingAuthorIds = array_keys(array_diff_key($postUserIds, $memberMap));
 if ($missingAuthorIds !== []) {
     $inList = implode(',', $missingAuthorIds);
-    $extraProfiles = admin_json_get_list('/rest/v1/profiles?select=id,display_id,username,avatar_url,role,tipo,cidade,status,created_at&id=in.(' . $inList . ')');
+    $extraProfiles = admin_json_get_list('/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at&id=in.(' . $inList . ')');
     foreach ($extraProfiles as $row) {
         if (isset($row['id'])) {
             $memberMap[(string) $row['id']] = $row;
@@ -758,13 +738,13 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
         <div class="panel-inner dark-card" style="overflow-x:auto">
             <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:10px;align-items:center">
                 <label for="memberSearch" class="stat-label" style="margin:0">Buscar</label>
-                <input type="search" id="memberSearch" class="dark-input" placeholder="Nome, @user, tipo, cidade..." autocomplete="off">
+                <input type="search" id="memberSearch" class="dark-input" placeholder="CL, role, status..." autocomplete="off">
             </div>
             <table class="data-table" id="membersTable">
                 <thead>
                     <tr>
                         <th>Membro</th>
-                        <th>Tipo / Cidade</th>
+                        <th>Info</th>
                         <th>Role / Status</th>
                         <th>Ações</th>
                     </tr>
@@ -775,14 +755,11 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
 
                     $mid = isset($mem['id']) ? (string) $mem['id'] : '';
                     $lbl = clLabel($mem);
-                    $un = isset($mem['username']) ? trim((string) $mem['username']) : '';
                     $av = isset($mem['avatar_url']) ? trim((string) $mem['avatar_url']) : '';
-                    $tipo = isset($mem['tipo']) ? trim((string) $mem['tipo']) : '';
-                    $cid = isset($mem['cidade']) ? trim((string) $mem['cidade']) : '';
                     $role = isset($mem['role']) ? (string) $mem['role'] : 'member';
                     $pstatus = isset($mem['status']) ? trim((string) $mem['status']) : '';
                     $isSelf = ($mid !== '' && $mid === $current_user_id);
-                    $searchBlob = strtolower($lbl . ' ' . ($un !== '' ? '@' . $un : '') . ' ' . $tipo . ' ' . $cid . ' ' . $pstatus . ' ' . $role);
+                    $searchBlob = strtolower($lbl . ' ' . $pstatus . ' ' . $role);
                     ?>
                     <tr data-search="<?= htmlspecialchars($searchBlob, ENT_QUOTES, 'UTF-8') ?>">
                         <td>
@@ -794,18 +771,10 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum): string
                                 <?php endif; ?>
                                 <div style="min-width:0">
                                     <div class="name-main"><?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?></div>
-                                    <?php if ($un !== ''): ?>
-                                        <div class="name-sub">@<?= htmlspecialchars($un, ENT_QUOTES, 'UTF-8') ?></div>
-                                    <?php endif; ?>
                                 </div>
                             </div>
                         </td>
-                        <td>
-                            <?= htmlspecialchars($tipo !== '' ? $tipo : '—', ENT_QUOTES, 'UTF-8') ?>
-                            <?php if ($cid !== ''): ?>
-                                <span style="color:#555"> · </span><?= htmlspecialchars($cid, ENT_QUOTES, 'UTF-8') ?>
-                            <?php endif; ?>
-                        </td>
+                        <td style="color:#666;font-size:0.85rem">—</td>
                         <td>
                             <?php if ($role === 'admin'): ?>
                                 <span class="badge-role admin">★ Admin</span>

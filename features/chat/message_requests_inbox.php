@@ -12,6 +12,7 @@ require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
 require_once CLUB61_ROOT . '/config/message_requests.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 $uid = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($uid === '' || !mr_service_available()) {
@@ -93,9 +94,7 @@ h1{font-size:1.1rem;font-weight:700;color:#C9A84C}
 
     $fid = isset($r['from_user']) ? (string) $r['from_user'] : '';
     $pr = $profiles[$fid] ?? [];
-    $label = isset($pr['display_id']) && trim((string) $pr['display_id']) !== ''
-        ? trim((string) $pr['display_id'])
-        : (isset($pr['username']) ? '@' . $pr['username'] : 'Membro');
+    $label = club61_display_id_label(isset($pr['display_id']) ? (string) $pr['display_id'] : null);
     $rid = isset($r['id']) ? (string) $r['id'] : '';
     ?>
     <div class="row">

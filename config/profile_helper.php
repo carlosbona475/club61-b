@@ -5,6 +5,37 @@ require_once __DIR__ . '/session.php';
 require_once __DIR__ . '/admin_guard.php';
 
 /**
+ * Colunas existentes em public.profiles para GET ?select= (alinhado ao Supabase).
+ * Não incluir display_name, username nem colunas removidas do schema.
+ */
+const CLUB61_PROFILE_REST_SELECT = 'id,display_id,bio,age,avatar_url,is_private,message_permission,relationship_status,created_at';
+
+/**
+ * Rótulo público do membro: sempre CL01, CL02… (nunca username).
+ */
+function club61_display_id_label(?string $displayIdRaw): string
+{
+    $disp = $displayIdRaw === null ? '' : trim((string) $displayIdRaw);
+    if ($disp === '') {
+        return 'Membro';
+    }
+    $num = null;
+    if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
+        $num = (int) $m[1];
+    } else {
+        $digits = preg_replace('/\D/', '', $disp);
+        if ($digits !== '') {
+            $num = (int) $digits;
+        }
+    }
+    if ($num !== null && $num > 0) {
+        return 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
+    }
+
+    return 'Membro';
+}
+
+/**
  * Service role configurada (servidor apenas).
  */
 function supabase_service_role_available(): bool
@@ -197,8 +228,8 @@ function ensureUserProfile($user_id, $email)
         return;
     }
 
-    // STEP 1 — perfil ja existe?
-    $url1 = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $user_id);
+    // STEP 1 — perfil ja existe? (apenas id — evita pedir colunas inexistentes)
+    $url1 = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $user_id) . '&select=id';
     $ch = curl_init($url1);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -218,23 +249,14 @@ function ensureUserProfile($user_id, $email)
         return;
     }
 
-    // STEP 2 — contar perfis e definir role + display_id sequencial (CL01, CL02...)
+    // STEP 2 — role; display_id é atribuído pelo trigger SQL (CL01, CL02…) ou por assignDisplayIdIfEmptyForUser
     $rowCount = countProfilesTotal($token);
     $role = $rowCount === 0 ? 'admin' : 'member';
-    $display_id = buildDisplayIdForNewProfile($rowCount);
 
-    // STEP 3 — inserir perfil
-    $username = '';
-    if ($email !== null && $email !== '') {
-        $parts = explode('@', (string) $email, 2);
-        $username = $parts[0];
-    }
-
+    // STEP 3 — inserir perfil (sem username visível; display_id pode ser preenchido no DB)
     $payload = [
         'id' => $user_id,
-        'username' => $username,
         'role' => $role,
-        'display_id' => $display_id,
     ];
 
     $ch = curl_init(SUPABASE_URL . '/rest/v1/profiles');

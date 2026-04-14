@@ -52,19 +52,14 @@ if ($current_user_id !== null && (string) $view_user_id === (string) $current_us
 
 $profileRow = null;
 $avatarUrl = '';
-$profileTipo = '';
-$profileCidade = '';
 $profileBio = '';
-$profileUsername = '';
-$displayName = '';
 $profileRelationship = '';
-$clLabel = 'CL00';
 $posts = [];
 $likeCounts = [];
 $userLikedPostIds = [];
 
 if ($access_token !== '') {
-    $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,display_name,relationship_type');
+    $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -89,7 +84,7 @@ if (
     supabase_service_role_available()
     && $view_user_id !== ''
 ) {
-    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,display_name,relationship_type');
+    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     $chO = curl_init($svcOtherUrl);
     curl_setopt($chO, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($chO, CURLOPT_SSL_VERIFYPEER, false);
@@ -108,7 +103,8 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'display_name', 'relationship_type'] as $k) {
+            foreach (explode(',', CLUB61_PROFILE_REST_SELECT) as $k) {
+                $k = trim($k);
                 if (array_key_exists($k, $o) && $o[$k] !== null && trim((string) $o[$k]) !== '') {
                     $profileRow[$k] = $o[$k];
                 }
@@ -121,40 +117,17 @@ if (is_array($profileRow)) {
     if (isset($profileRow['avatar_url'])) {
         $avatarUrl = trim((string) $profileRow['avatar_url']);
     }
-    if (isset($profileRow['tipo'])) {
-        $profileTipo = trim((string) $profileRow['tipo']);
-    }
-    if (isset($profileRow['cidade'])) {
-        $profileCidade = trim((string) $profileRow['cidade']);
-    }
     if (isset($profileRow['bio']) && $profileRow['bio'] !== null) {
         $profileBio = trim((string) $profileRow['bio']);
     }
-    if (isset($profileRow['username'])) {
-        $profileUsername = trim((string) $profileRow['username']);
-    }
-    if (isset($profileRow['display_name']) && $profileRow['display_name'] !== null) {
-        $displayName = trim((string) $profileRow['display_name']);
-    }
-    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
-        $profileRelationship = trim((string) $profileRow['relationship_type']);
-    }
-    $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            $clLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
+    if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_status']);
     }
 }
+
+$clLabel = is_array($profileRow)
+    ? club61_display_id_label(isset($profileRow['display_id']) ? (string) $profileRow['display_id'] : null)
+    : club61_display_id_label(null);
 
 if ($access_token !== '') {
     $postsUrl = SUPABASE_URL . '/rest/v1/posts?user_id=eq.' . urlencode($view_user_id) . '&select=' . rawurlencode('id,image_url,caption,created_at') . '&order=created_at.desc';
@@ -246,7 +219,7 @@ if ($current_user_id !== null) {
     $mrBtn = mr_profile_button_state((string) $current_user_id, (string) $view_user_id);
 }
 
-$headline = $displayName !== '' ? $displayName : $clLabel;
+$headline = $clLabel;
 $csrf = csrf_token();
 $returnUrl = '/features/profile/view.php?id=' . rawurlencode($view_user_id);
 
@@ -602,12 +575,6 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
                 <div class="ig-title-row">
                     <h1 class="profile-cl"><?= htmlspecialchars($headline, ENT_QUOTES, 'UTF-8') ?></h1>
                 </div>
-                <?php if ($displayName !== '' && $clLabel !== '' && $clLabel !== 'CL00'): ?>
-                <p class="ig-handle-sub"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?><?php if ($profileUsername !== ''): ?> · @<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?><?php endif; ?></p>
-                <?php elseif ($profileUsername !== ''): ?>
-                <p class="ig-handle-sub">@<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?></p>
-                <?php endif; ?>
-
                 <div class="ig-stats" aria-label="Estatísticas">
                     <a class="ig-stat-link" href="#profile-posts-grid">
                         <div class="ig-stat">
@@ -664,21 +631,9 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
                 </div>
                 <?php endif; ?>
 
-                <?php if ($profileTipo !== '' || $profileCidade !== '' || $profileRelationship !== ''): ?>
+                <?php if ($profileRelationship !== ''): ?>
                 <p class="ig-meta-line">
-                    <?php
-                    $bits = [];
-                    if ($profileTipo !== '') {
-                        $bits[] = htmlspecialchars($profileTipo, ENT_QUOTES, 'UTF-8');
-                    }
-                    if ($profileCidade !== '') {
-                        $bits[] = htmlspecialchars($profileCidade, ENT_QUOTES, 'UTF-8');
-                    }
-                    if ($profileRelationship !== '') {
-                        $bits[] = htmlspecialchars(club61_view_rel_label($profileRelationship), ENT_QUOTES, 'UTF-8');
-                    }
-                    echo implode(' · ', $bits);
-                    ?>
+                    <?= htmlspecialchars(club61_view_rel_label($profileRelationship), ENT_QUOTES, 'UTF-8') ?>
                 </p>
                 <?php endif; ?>
             </div>

@@ -10,6 +10,7 @@ require_once dirname(__DIR__, 2) . '/config/paths.php';
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 $postId = isset($_GET['post_id']) ? (int) $_GET['post_id'] : 0;
 if ($postId <= 0 || !feed_post_exists($postId)) {
@@ -60,8 +61,7 @@ h1{font-size:1rem;color:#C9A84C;margin-bottom:16px}
     $uid = isset($c['user_id']) ? (string) $c['user_id'] : '';
     $pr = $profiles[$uid] ?? [];
     $disp = isset($pr['display_id']) ? trim((string) $pr['display_id']) : '';
-    $uname = isset($pr['username']) ? trim((string) $pr['username']) : '';
-    $who = $disp !== '' ? $disp : ($uname !== '' ? '@' . $uname : 'Membro');
+    $who = club61_display_id_label($disp);
     $text = isset($c['comment_text']) ? (string) $c['comment_text'] : '';
     $ts = isset($c['created_at']) ? (string) $c['created_at'] : '';
     ?>

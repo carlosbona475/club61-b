@@ -7,6 +7,7 @@ require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 $viewerToken = $_SESSION['access_token'] ?? '';
 if ($viewerToken === '') {
@@ -62,7 +63,7 @@ if (is_array($storyRow) && !empty($storyRow['image_url'])) {
     $imageUrl = trim((string) $storyRow['image_url']);
 }
 
-$profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=avatar_url,display_id,username';
+$profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=avatar_url,display_id';
 $ch = curl_init($profUrl);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -81,26 +82,7 @@ if (is_array($profRows) && !empty($profRows[0])) {
         $avatarUrl = trim((string) $pr['avatar_url']);
     }
     $sdisp = isset($pr['display_id']) ? trim((string) $pr['display_id']) : '';
-    if ($sdisp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $sdisp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $sdisp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            $displayLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
-    }
-    if ($displayLabel === '' && !empty($pr['username'])) {
-        $displayLabel = '@' . trim((string) $pr['username']);
-    }
-    if ($displayLabel === '') {
-        $displayLabel = 'Membro';
-    }
+    $displayLabel = club61_display_id_label($sdisp);
 }
 
 ?>

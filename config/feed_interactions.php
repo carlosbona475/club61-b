@@ -484,7 +484,7 @@ function feed_fetch_profiles_by_ids(array $userIds): array
         return $out;
     }
     $in = implode(',', $ids);
-    $url = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,username,avatar_url&id=in.(' . $in . ')';
+    $url = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url&id=in.(' . $in . ')';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,

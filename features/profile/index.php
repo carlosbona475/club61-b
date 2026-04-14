@@ -46,27 +46,22 @@ if ($profile_user_id === null || $profile_user_id === '') {
 
 $invites = array();
 $profileRow = null;
-$clLabel = 'CL00';
 $avatarUrl = '';
-$profileTipo = '';
-$profileCidade = '';
 $profileBio = '';
 $profileAge = null;
 $profileRelationship = '';
-$profilePartnerAge = null;
+$cidade = '';
 $statPosts = 0;
 $statLikesRecv = 0;
 $statFollowersCount = 0;
 $statFollowingCount = 0;
 $isFollowingProfile = false;
 $mrBtn = 'hidden';
-$profileUsername = '';
-$displayName = '';
 $is_admin = false;
 
 $access_token = isset($_SESSION['access_token']) ? $_SESSION['access_token'] : '';
 
-// Busca REST do perfil: select=display_id,username,avatar_url,tipo,cidade
+// Busca REST do perfil: display_id público (CL01…), sem username na UI
 // No próprio perfil a URL deve ser: .../profiles?id=eq.{ $current_user_id }&select=...
 // Com ?user= (outro membro) usa-se o id desse perfil.
 $profile_lookup_id = ($profile_user_id !== null && $profile_user_id !== '') ? (string) $profile_user_id : '';
@@ -74,9 +69,9 @@ $is_own_profile = $current_user_id !== null && (string) $profile_user_id === (st
 
 if ($access_token !== '' && $profile_lookup_id !== '') {
     if ($is_own_profile) {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     } else {
-        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
+        $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     }
     $ch = curl_init($profile_url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -113,13 +108,13 @@ if (
     }
 }
 
-// Próprio perfil: reforçar dados (avatar, CL, tipo, cidade) via service_role se RLS ocultar campos no JWT
+// Próprio perfil: reforçar dados via service_role se RLS ocultar campos no JWT
 if (
     $current_user_id !== null
     && (string) $profile_user_id === (string) $current_user_id
     && supabase_service_role_available()
 ) {
-    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
+    $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     $ch = curl_init($svcUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
@@ -138,7 +133,8 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age', 'display_name'] as $k) {
+            foreach (explode(',', CLUB61_PROFILE_REST_SELECT) as $k) {
+                $k = trim($k);
                 if (array_key_exists($k, $svc) && $svc[$k] !== null && trim((string) $svc[$k]) !== '') {
                     $profileRow[$k] = $svc[$k];
                 }
@@ -151,48 +147,14 @@ if (is_array($profileRow)) {
     if (isset($profileRow['avatar_url'])) {
         $avatarUrl = trim((string) $profileRow['avatar_url']);
     }
-    if (isset($profileRow['username'])) {
-        $profileUsername = trim((string) $profileRow['username']);
-    }
-    if (isset($profileRow['display_name']) && $profileRow['display_name'] !== null) {
-        $displayName = trim((string) $profileRow['display_name']);
-    }
-    if (isset($profileRow['tipo'])) {
-        $profileTipo = trim((string) $profileRow['tipo']);
-    }
-    if (isset($profileRow['cidade'])) {
-        $profileCidade = trim((string) $profileRow['cidade']);
-    }
     if (isset($profileRow['bio']) && $profileRow['bio'] !== null) {
         $profileBio = trim((string) $profileRow['bio']);
     }
     if (isset($profileRow['age']) && $profileRow['age'] !== null && $profileRow['age'] !== '') {
         $profileAge = (int) $profileRow['age'];
     }
-    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
-        $profileRelationship = trim((string) $profileRow['relationship_type']);
-    }
-    if (isset($profileRow['partner_age']) && $profileRow['partner_age'] !== null && $profileRow['partner_age'] !== '') {
-        $profilePartnerAge = (int) $profileRow['partner_age'];
-    }
-    $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            $clLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        } else {
-            $clLabel = 'CL00';
-        }
-    } else {
-        $clLabel = 'CL00';
+    if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_status']);
     }
 }
 
@@ -201,7 +163,7 @@ if (
     && $profile_lookup_id !== ''
     && supabase_service_role_available()
 ) {
-    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profile_lookup_id) . '&select=' . rawurlencode('display_id,username,avatar_url,tipo,cidade,bio,age,relationship_type,partner_age,display_name');
+    $svcOtherUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($profile_lookup_id) . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     $chO = curl_init($svcOtherUrl);
     curl_setopt($chO, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($chO, CURLOPT_SSL_VERIFYPEER, false);
@@ -220,7 +182,8 @@ if (
             if (!is_array($profileRow)) {
                 $profileRow = [];
             }
-            foreach (['display_id', 'username', 'avatar_url', 'tipo', 'cidade', 'bio', 'age', 'relationship_type', 'partner_age', 'display_name'] as $k) {
+            foreach (explode(',', CLUB61_PROFILE_REST_SELECT) as $k) {
+                $k = trim($k);
                 if (array_key_exists($k, $o) && $o[$k] !== null && trim((string) $o[$k]) !== '') {
                     $profileRow[$k] = $o[$k];
                 }
@@ -228,41 +191,22 @@ if (
             if (isset($o['bio'])) {
                 $profileBio = trim((string) $o['bio']);
             }
-            if (isset($o['username'])) {
-                $profileUsername = trim((string) $o['username']);
-            }
             if (isset($o['age']) && $o['age'] !== null && $o['age'] !== '') {
                 $profileAge = (int) $o['age'];
             }
-            if (isset($o['relationship_type'])) {
-                $profileRelationship = trim((string) $o['relationship_type']);
-            }
-            if (isset($o['partner_age']) && $o['partner_age'] !== null && $o['partner_age'] !== '') {
-                $profilePartnerAge = (int) $o['partner_age'];
+            if (isset($o['relationship_status'])) {
+                $profileRelationship = trim((string) $o['relationship_status']);
             }
             if (isset($o['avatar_url']) && trim((string) $o['avatar_url']) !== '') {
                 $avatarUrl = trim((string) $o['avatar_url']);
             }
-            $disp = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
-            if ($disp !== '') {
-                $num = null;
-                if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-                    $num = (int) $m[1];
-                } else {
-                    $digits = preg_replace('/\D/', '', $disp);
-                    if ($digits !== '') {
-                        $num = (int) $digits;
-                    }
-                }
-                if ($num !== null && $num > 0) {
-                    $clLabel = 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-                } else {
-                    $clLabel = 'CL00';
-                }
-            }
         }
     }
 }
+
+$clLabel = is_array($profileRow)
+    ? club61_display_id_label(isset($profileRow['display_id']) ? (string) $profileRow['display_id'] : null)
+    : club61_display_id_label(null);
 
 if ($profile_lookup_id !== '' && profile_stats_service_ok()) {
     $statPosts = profile_count_posts($profile_lookup_id);
@@ -369,10 +313,7 @@ if ($is_admin && $access_token !== '' && $current_user_id !== null && $current_u
     }
 }
 
-$cidade = $profileCidade;
-
 $csrf = csrf_token();
-$bigHandle = $displayName !== '' ? $displayName : ($clLabel !== '' && $clLabel !== 'CL00' ? $clLabel : ($profileUsername !== '' ? '@' . $profileUsername : 'Membro'));
 $relLower = strtolower(trim($profileRelationship));
 $igShowAge = $profileAge !== null;
 $igShowCity = trim($cidade) !== '';
@@ -979,16 +920,11 @@ $igShowRel = trim($profileRelationship) !== '';
                     </div>
                     <div class="ig-main-col">
                         <div class="ig-title-row">
-                            <h2 class="ig-username"><?= htmlspecialchars($bigHandle, ENT_QUOTES, 'UTF-8') ?></h2>
+                            <h2 class="ig-username"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></h2>
                             <?php if ($is_own_profile): ?>
                             <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>
                             <?php endif; ?>
                         </div>
-                        <?php if ($displayName !== '' && $clLabel !== '' && $clLabel !== 'CL00'): ?>
-                        <p class="ig-handle-sub"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?><?php if ($profileUsername !== ''): ?> · @<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?><?php endif; ?></p>
-                        <?php elseif ($profileUsername !== '' && !$is_own_profile): ?>
-                        <p class="ig-handle-sub">@<?= htmlspecialchars($profileUsername, ENT_QUOTES, 'UTF-8') ?></p>
-                        <?php endif; ?>
                         <div class="ig-actions">
                             <?php if ($is_own_profile): ?>
                             <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
@@ -1060,18 +996,6 @@ $igShowRel = trim($profileRelationship) !== '';
                         <?php endif; ?>
                     </div>
                 </div>
-                <?php if (
-                    (string) $profile_user_id === (string) $current_user_id
-                    && $current_user_id !== null
-                    && ($profileTipo !== '' || $cidade !== '')
-                ): ?>
-                <p class="perfil-boasvindas">
-                    Bem-vindo!
-                    <?php if ($profileTipo !== ''): ?> Tipo: <strong><?php echo htmlspecialchars($profileTipo, ENT_QUOTES, 'UTF-8'); ?></strong><?php endif; ?>
-                    <?php if ($profileTipo !== '' && $cidade !== ''): ?> ·<?php endif; ?>
-                    <?php if ($cidade !== ''): ?> Cidade: <strong><?php echo htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8'); ?></strong><?php endif; ?>.
-                </p>
-                <?php endif; ?>
                 <p class="auth-sub">Identificador do membro neste espaço.</p>
                 <div class="profile-id"><?php echo htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8'); ?></div>
                 <?php if ($is_own_profile): ?>

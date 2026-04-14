@@ -49,26 +49,8 @@ function chat_service_headers(bool $json = false): array
 function clLabel(array $author): string
 {
     $disp = isset($author['display_id']) ? trim((string) $author['display_id']) : '';
-    $uname = isset($author['username']) ? trim((string) $author['username']) : '';
-    if ($disp !== '') {
-        $num = null;
-        if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-            $num = (int) $m[1];
-        } else {
-            $digits = preg_replace('/\D/', '', $disp);
-            if ($digits !== '') {
-                $num = (int) $digits;
-            }
-        }
-        if ($num !== null && $num > 0) {
-            return 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT);
-        }
-    }
-    if ($uname !== '') {
-        return '@' . $uname;
-    }
 
-    return 'Membro';
+    return club61_display_id_label($disp);
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -174,7 +156,7 @@ $idList = array_keys($userIds);
 $profilesById = [];
 if ($idList !== []) {
     $inList = implode(',', $idList);
-    $pUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,username,avatar_url,last_seen&id=in.(' . $inList . ')';
+    $pUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
     $chP = curl_init($pUrl);
     curl_setopt_array($chP, [
         CURLOPT_RETURNTRANSFER => true,

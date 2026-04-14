@@ -12,6 +12,7 @@ require_once CLUB61_ROOT . '/config/geo.php';
 require_once CLUB61_ROOT . '/config/followers.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/online.php';
+require_once CLUB61_ROOT . '/config/profile_helper.php';
 
 $me = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 if ($me === '') {
@@ -71,7 +72,7 @@ $followingSet = followers_get_following_id_set($me);
 
 if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
     $candidatesUrl = SUPABASE_URL . '/rest/v1/profiles?'
-        . 'select=' . rawurlencode('id,username,avatar_url,bairro,cidade,latitude,longitude,last_seen')
+        . 'select=' . rawurlencode('id,display_id,avatar_url,bairro,cidade,latitude,longitude,last_seen')
         . '&id=neq.' . urlencode($me)
         . '&latitude=not.is.null'
         . '&longitude=not.is.null'
@@ -102,7 +103,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
     } else {
         $fetchError = true;
         $fallbackUrl = SUPABASE_URL . '/rest/v1/profiles?'
-            . 'select=' . rawurlencode('id,username,avatar_url,bairro,cidade,latitude,longitude,last_seen')
+            . 'select=' . rawurlencode('id,display_id,avatar_url,bairro,cidade,latitude,longitude,last_seen')
             . '&id=neq.' . urlencode($me)
             . '&limit=200'
             . '&order=id.asc';
@@ -414,7 +415,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
                                 $r = $item['row'];
                                 $km = $item['km'];
                                 $uid = isset($r['id']) ? (string) $r['id'] : '';
-                                $uname = isset($r['username']) ? trim((string) $r['username']) : '';
+                                $memberLabel = club61_display_id_label(isset($r['display_id']) ? (string) $r['display_id'] : null);
                                 $bairro = isset($r['bairro']) ? trim((string) $r['bairro']) : '';
                                 if ($bairro === '' && isset($r['cidade'])) {
                                     $bairro = trim((string) $r['cidade']);
@@ -435,7 +436,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
                                             <div class="nearby-card__fallback avatar-wrapper" aria-hidden="true">&#128100;<?php if ($isOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></div>
                                         <?php endif; ?>
                                         <div class="nearby-card__text">
-                                            <p class="nearby-card__user"><?= htmlspecialchars($uname !== '' ? '@' . $uname : 'Membro', ENT_QUOTES, 'UTF-8') ?></p>
+                                            <p class="nearby-card__user"><?= htmlspecialchars($memberLabel, ENT_QUOTES, 'UTF-8') ?></p>
                                             <p class="nearby-card__bairro"><i class="bi bi-geo-alt" aria-hidden="true"></i> <?= htmlspecialchars($bairro, ENT_QUOTES, 'UTF-8') ?></p>
                                         </div>
                                     </a>
@@ -471,7 +472,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
                 'id' => (string) ($r['id'] ?? ''),
                 'lat' => isset($r['latitude']) ? (float) $r['latitude'] : null,
                 'lng' => isset($r['longitude']) ? (float) $r['longitude'] : null,
-                'username' => isset($r['username']) ? (string) $r['username'] : 'Membro',
+                'label' => club61_display_id_label(isset($r['display_id']) ? (string) $r['display_id'] : null),
             ];
         }, $nearby), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         if (window.L && ME.lat !== null && ME.lng !== null) {
@@ -485,7 +486,7 @@ if ($serviceOk && $hasMyCoords && $myLat !== null && $myLng !== null) {
                 POINTS.forEach(function (p) {
                     if (typeof p.lat !== 'number' || typeof p.lng !== 'number') return;
                     var href = '/features/profile/view.php?id=' + encodeURIComponent(p.id || '');
-                    L.marker([p.lat, p.lng], { icon: nearIcon }).addTo(map).bindPopup('<a href="' + href + '" style="color:#7B2EFF;text-decoration:none">@' + String(p.username || 'Membro') + '</a>');
+                    L.marker([p.lat, p.lng], { icon: nearIcon }).addTo(map).bindPopup('<a href="' + href + '" style="color:#7B2EFF;text-decoration:none">' + String(p.label || 'Membro') + '</a>');
                 });
             }
         }

@@ -15,23 +15,9 @@ require_once CLUB61_ROOT . '/config/csrf.php';
 if (!class_exists('FeedFormatting')) {
     final class FeedFormatting
     {
-        public static function buildClLabel(string $disp, string $fallback = ''): string
+        public static function buildClLabel(string $disp, string $unused = ''): string
         {
-            if ($disp === '') {
-                return $fallback;
-            }
-            $num = null;
-            if (preg_match('/^CL\s*0*(\d+)$/i', $disp, $m)) {
-                $num = (int) $m[1];
-            } else {
-                $digits = preg_replace('/\D/', '', $disp);
-                if ($digits !== '') {
-                    $num = (int) $digits;
-                }
-            }
-            return ($num !== null && $num > 0)
-                ? 'CL' . str_pad((string) min(999, $num), 2, '0', STR_PAD_LEFT)
-                : $fallback;
+            return club61_display_id_label($disp);
         }
 
         public static function relativeTime(?string $iso): string
@@ -101,7 +87,7 @@ foreach ($posts as $p) {
 $postAuthorIdList = array_keys($postAuthorIds);
 if ($postAuthorIdList !== [] && $access_token !== '') {
     $inList = implode(',', $postAuthorIdList);
-    $apUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,username,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
+    $apUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
     $chAp = curl_init($apUrl);
     curl_setopt_array($chAp, [
         CURLOPT_RETURNTRANSFER => true,
@@ -163,8 +149,7 @@ $pid = (int) ($post['id'] ?? 0);
 $authorId = isset($post['user_id']) ? (string) $post['user_id'] : '';
 $prof = $authorId !== '' && isset($postAuthorById[$authorId]) ? $postAuthorById[$authorId] : null;
 $pdisp = $prof && isset($prof['display_id']) ? trim((string) $prof['display_id']) : '';
-$puname = $prof && isset($prof['username']) ? trim((string) $prof['username']) : '';
-$authorLabel = FeedFormatting::buildClLabel($pdisp, $puname !== '' ? '@' . $puname : 'Membro');
+$authorLabel = FeedFormatting::buildClLabel($pdisp);
 $pavatar = $prof && !empty($prof['avatar_url']) ? trim((string) $prof['avatar_url']) : '';
 $pLastSeen = $prof && isset($prof['last_seen']) ? (string) $prof['last_seen'] : null;
 $pOnline = isUserOnline($pLastSeen);
@@ -190,7 +175,7 @@ $profileViewUrl = '/features/profile/view.php?id=' . rawurlencode($authorId);
   <div class="post-actions-row"><button type="button" class="like-btn<?= $isLiked ? ' is-liked' : '' ?>" data-like-btn data-post-id="<?= (int) $pid ?>" aria-pressed="<?= $isLiked ? 'true' : 'false' ?>" aria-label="<?= $isLiked ? 'Descurtir' : 'Curtir' ?>"><?= $isLiked ? '♥' : '♡' ?></button><span class="like-count" data-like-count><?= (int) $likeTotal ?></span></div>
   <div class="post-comments" data-comment-list data-post-id="<?= (int) $pid ?>">
     <?php foreach ($rawComments as $cr): ?>
-    <?php $cuid = isset($cr['user_id']) ? (string) $cr['user_id'] : ''; $cpr = $cuid !== '' && isset($commentProfiles[$cuid]) ? $commentProfiles[$cuid] : null; $cdisp = $cpr && isset($cpr['display_id']) ? trim((string) $cpr['display_id']) : ''; $cuname = $cpr && isset($cpr['username']) ? trim((string) $cpr['username']) : ''; $clab = $cdisp !== '' ? $cdisp : ($cuname !== '' ? '@' . $cuname : 'Membro'); $ctxt = isset($cr['comment_text']) ? (string) $cr['comment_text'] : ''; ?>
+    <?php $cuid = isset($cr['user_id']) ? (string) $cr['user_id'] : ''; $cpr = $cuid !== '' && isset($commentProfiles[$cuid]) ? $commentProfiles[$cuid] : null; $cdisp = $cpr && isset($cpr['display_id']) ? trim((string) $cpr['display_id']) : ''; $clab = FeedFormatting::buildClLabel($cdisp); $ctxt = isset($cr['comment_text']) ? (string) $cr['comment_text'] : ''; ?>
     <div class="comment-line"><span class="comment-user"><?= htmlspecialchars($clab, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars($ctxt, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endforeach; ?>
   </div>

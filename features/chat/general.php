@@ -275,40 +275,46 @@ body.gm-body{
 }
 .gm-shell{
   flex:1;display:flex;flex-direction:column;min-height:0;width:100%;
-  max-width:700px;margin:0 auto;align-items:stretch;
+  max-width:900px;margin:0 auto;align-items:stretch;
 }
 .gm-main-col{flex:1;min-width:0;max-width:700px;display:flex;flex-direction:column;width:100%;margin:0 auto}
 .ch-main{flex:1;display:flex;flex-direction:column;min-height:0;width:100%;max-width:700px;margin:0 auto}
 .gm-sidebar{
-  display:none;flex-direction:column;flex-shrink:0;width:200px;background:#111;
+  display:none;flex-direction:column;flex-shrink:0;width:180px;background:#111;
   border-left:1px solid #222;padding:12px 10px 16px;gap:10px;overflow-y:auto;
 }
-.gm-sidebar-title{font-size:0.72rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.gm-sidebar-title{font-size:0.78rem;font-weight:800;color:#C9A84C;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
 .gm-side-item{width:100%}
 .gm-side-link{
   display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:8px;text-decoration:none;color:#ddd;font-size:0.8rem;position:relative;
 }
 .gm-side-link:hover{background:rgba(123,46,255,0.08);color:#fff}
-.gm-side-av{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#0d0d0d;flex-shrink:0;border:1px solid #222}
-.gm-side-ph{width:32px;height:32px;border-radius:50%;background:#0d0d0d;border:1px solid #222;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#7B2EFF;flex-shrink:0}
+.gm-side-av{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#0d0d0d;flex-shrink:0;border:1px solid #222}
+.gm-side-ph{width:36px;height:36px;border-radius:50%;background:#0d0d0d;border:1px solid #222;display:flex;align-items:center;justify-content:center;font-size:0.95rem;color:#7B2EFF;flex-shrink:0}
 .gm-side-cl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C9A84C;font-weight:600}
 .gm-side-dot{
   width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;
   box-shadow:0 0 0 2px #111;
+  animation:gmPulse 1.35s ease-in-out infinite;
 }
-.gm-online-fab{
-  display:none;position:fixed;right:12px;z-index:280;
-  bottom:calc(56px + env(safe-area-inset-bottom,0px) + 10px);
-  padding:8px 12px;border-radius:999px;border:1px solid #333;background:#111;color:#C9A84C;
-  font-size:0.8rem;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.45);
+@keyframes gmPulse{
+  0%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,.55)}
+  70%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(34,197,94,0)}
+  100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0)}
+}
+.gm-online-top{
+  display:none;
+  border:1px solid #333;background:#111;color:#C9A84C;border-radius:999px;
+  padding:6px 10px;font-size:.75rem;font-weight:700;cursor:pointer;
+  line-height:1;
 }
 @media (min-width:721px){
-  .gm-shell{flex-direction:column;max-width:700px;width:100%}
+  .gm-shell{flex-direction:row;max-width:900px;width:100%}
   .gm-main-col{max-width:700px}
   .gm-sidebar{display:flex}
 }
 @media (max-width:720px){
-  .gm-online-fab{display:block!important}
+  .gm-online-top{display:inline-flex;align-items:center}
   .gm-sidebar{
     display:flex!important;flex-direction:column;
     position:fixed;top:0;right:0;bottom:0;width:min(260px,88vw);z-index:400;
@@ -329,7 +335,7 @@ body.gm-body{
 .ch-top a:hover{color:#C9A84C}
 .ch-title-wrap{display:flex;align-items:center;gap:8px;flex:1;justify-content:center}
 .ch-title{font-size:1rem;font-weight:700;color:#C9A84C}
-.ch-msgs{flex:1;overflow-y:auto;width:100%;padding:22px 16px 16px;display:flex;flex-direction:column;gap:20px;min-height:0;height:calc(100vh - 180px)}
+.ch-msgs{flex:1;overflow-y:auto;width:100%;padding:22px 16px 16px;display:flex;flex-direction:column;gap:20px;min-height:0;height:calc(100vh - 220px)}
 .date-div{text-align:center;font-size:0.74rem;color:#444;margin:18px 0 14px}
 .msg-row{display:flex;gap:16px;max-width:100%;align-items:flex-end}
 .msg-row.me{justify-content:flex-end}
@@ -380,6 +386,7 @@ body.gm-body{
 <header class="ch-top">
   <a href="/features/chat/salas.php" aria-label="Voltar às salas">←</a>
   <div class="ch-title-wrap"><span aria-hidden="true"><?= htmlspecialchars($roomMeta['emoji'], ENT_QUOTES, 'UTF-8') ?></span><span class="ch-title"><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?></span></div>
+  <button type="button" class="gm-online-top" id="gmOnlineTop" aria-controls="gmSidebar">👥 <?= (int) $sidebarOnlineCount ?> online</button>
   <a href="/features/chat/inbox.php" aria-label="Mensagens">✉️</a>
 </header>
 
@@ -512,7 +519,7 @@ foreach ($messages as $m):
 </div>
 
 <aside class="gm-sidebar" id="gmSidebar" aria-label="Online nesta sala">
-  <div class="gm-sidebar-title">Nesta sala</div>
+  <div class="gm-sidebar-title">Na sala</div>
   <?php if ($sidebarOnlineCount === 0): ?>
   <p style="font-size:0.78rem;color:#555;line-height:1.4;margin:4px 0 0">Ninguém com atividade recente (últimos 3 min).</p>
   <?php else: ?>
@@ -541,9 +548,6 @@ foreach ($messages as $m):
 </aside>
 </div>
 <div class="gm-sidebar-backdrop" id="gmSidebarBackdrop" aria-hidden="true"></div>
-<button type="button" class="gm-online-fab" id="gmOnlineFab" aria-controls="gmSidebar">
-  👥 <?= (int) $sidebarOnlineCount ?> online
-</button>
 
 <nav class="bottomnav" aria-label="Navegação">
   <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
@@ -625,7 +629,7 @@ function clearGmFile() {
 
 (function () {
   var side = document.getElementById('gmSidebar');
-  var fab = document.getElementById('gmOnlineFab');
+  var fab = document.getElementById('gmOnlineTop');
   var back = document.getElementById('gmSidebarBackdrop');
   if (!side || !fab) return;
   function close() {

@@ -8,7 +8,7 @@ require_once __DIR__ . '/admin_guard.php';
  * Colunas existentes em public.profiles para GET ?select= (alinhado ao Supabase).
  * Não incluir display_name, username nem colunas removidas do schema.
  */
-const CLUB61_PROFILE_REST_SELECT = 'id,display_id,bio,age,avatar_url,is_private,message_permission,relationship_status,created_at,cidade,role';
+const CLUB61_PROFILE_REST_SELECT = 'id,display_id,bio,age,avatar_url,is_private,message_permission,relationship_type,created_at,cidade,role';
 
 /**
  * Rótulo público do membro: sempre CL01, CL02… (nunca username).

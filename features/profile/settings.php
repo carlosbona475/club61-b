@@ -59,7 +59,7 @@ if (supabase_service_role_available()) {
                 $ageVal = (string) (int) $p['age'];
             }
             $cidade = isset($p['cidade']) && $p['cidade'] !== null ? trim((string) $p['cidade']) : '';
-            $rel = isset($p['relationship_status']) ? strtolower(trim((string) $p['relationship_status'])) : '';
+            $rel = isset($p['relationship_type']) ? strtolower(trim((string) $p['relationship_type'])) : '';
             $avatarUrl = isset($p['avatar_url']) ? trim((string) $p['avatar_url']) : '';
             if (isset($p['is_private'])) {
                 $isPrivate = (bool) $p['is_private'];
@@ -173,7 +173,7 @@ $relLower = $rel;
                         <label for="cid-s">Cidade</label>
                         <input id="cid-s" type="text" name="cidade" maxlength="120" value="<?= htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') ?>" placeholder="Ex.: São Paulo">
                         <label for="rel-s">Relacionamento</label>
-                        <select id="rel-s" name="relationship_status" required>
+                        <select id="rel-s" name="relationship_type" required>
                             <option value="" disabled<?= $relLower === '' ? ' selected' : '' ?>>Selecione…</option>
                             <option value="solteiro"<?= $relLower === 'solteiro' || $relLower === 'single' ? ' selected' : '' ?>>Solteiro</option>
                             <option value="namorando"<?= $relLower === 'namorando' ? ' selected' : '' ?>>Namorando</option>

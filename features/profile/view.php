@@ -124,8 +124,8 @@ if (is_array($profileRow)) {
     if (array_key_exists('cidade', $profileRow) && $profileRow['cidade'] !== null) {
         $profileCidade = trim((string) $profileRow['cidade']);
     }
-    if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
-        $profileRelationship = trim((string) $profileRow['relationship_status']);
+    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_type']);
     }
 }
 

@@ -153,8 +153,8 @@ if (is_array($profileRow)) {
     if (isset($profileRow['age']) && $profileRow['age'] !== null && $profileRow['age'] !== '') {
         $profileAge = (int) $profileRow['age'];
     }
-    if (isset($profileRow['relationship_status']) && $profileRow['relationship_status'] !== null) {
-        $profileRelationship = trim((string) $profileRow['relationship_status']);
+    if (isset($profileRow['relationship_type']) && $profileRow['relationship_type'] !== null) {
+        $profileRelationship = trim((string) $profileRow['relationship_type']);
     }
     if (array_key_exists('cidade', $profileRow) && $profileRow['cidade'] !== null) {
         $cidade = trim((string) $profileRow['cidade']);
@@ -197,8 +197,8 @@ if (
             if (isset($o['age']) && $o['age'] !== null && $o['age'] !== '') {
                 $profileAge = (int) $o['age'];
             }
-            if (isset($o['relationship_status'])) {
-                $profileRelationship = trim((string) $o['relationship_status']);
+            if (isset($o['relationship_type'])) {
+                $profileRelationship = trim((string) $o['relationship_type']);
             }
             if (array_key_exists('cidade', $o)) {
                 $cidade = $o['cidade'] === null ? '' : trim((string) $o['cidade']);

@@ -15,32 +15,32 @@ $rooms = club61_city_rooms();
 /**
  * Metadata visual por sala (mantém fallback seguro se surgir nova cidade).
  *
- * @return array{emoji:string,subtitle:string}
+ * @return array{initials:string,subtitle:string}
  */
 function room_visual_meta(array $room): array
 {
     $nome = mb_strtolower(trim((string) ($room['nome'] ?? '')), 'UTF-8');
     if (str_contains($nome, 'presidente prudente')) {
         return [
-            'emoji' => '🏙️🌆🌃',
+            'initials' => 'PP',
             'subtitle' => 'Bate-papo do Oeste Paulista',
         ];
     }
     if (str_contains($nome, 'maring')) {
         return [
-            'emoji' => '🌳🌿🍃',
+            'initials' => 'MA',
             'subtitle' => 'Bate-papo da Capital do Noroeste',
         ];
     }
     if (str_contains($nome, 'londrina')) {
         return [
-            'emoji' => '☀️🌞🌤️',
+            'initials' => 'LO',
             'subtitle' => 'Bate-papo da Capital do Norte',
         ];
     }
 
     return [
-        'emoji' => (string) ($room['emoji'] ?? '🏙️'),
+        'initials' => 'CL',
         'subtitle' => 'Sala oficial do Club61',
     ];
 }
@@ -64,7 +64,7 @@ body{
 .header a:hover{color:#C9A84C}
 .header h1{margin:0;font-size:1rem;font-weight:700;color:#C9A84C}
 .grid{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;padding:28px;max-width:1040px;margin:0 auto;
+  display:grid;grid-template-columns:1fr;gap:24px;padding:28px;max-width:600px;margin:0 auto;
 }
 .card{
   background:#111;border:1px solid #222;border-radius:16px;padding:30px 20px;text-align:center;text-decoration:none;color:#fff;
@@ -74,6 +74,7 @@ body{
 .icon{
   width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3rem;margin:0 auto 16px;
   box-shadow:0 8px 22px rgba(0,0,0,.35);
+  color:#fff;font-weight:800;letter-spacing:.04em;
 }
 .name{font-weight:800;font-size:1.3rem;margin-bottom:8px;letter-spacing:.01em}
 .subtitle{color:#9a9a9a;font-size:.82rem;line-height:1.4;min-height:36px;margin-bottom:12px}
@@ -115,7 +116,7 @@ body{
   <?php $meta = room_visual_meta($room); ?>
   <a class="card" href="/features/chat/general.php?sala=<?= rawurlencode($room['slug']) ?>">
     <div class="icon" style="background:<?= htmlspecialchars($room['cor'], ENT_QUOTES, 'UTF-8') ?>">
-      <?= htmlspecialchars($meta['emoji'], ENT_QUOTES, 'UTF-8') ?>
+      <?= htmlspecialchars($meta['initials'], ENT_QUOTES, 'UTF-8') ?>
     </div>
     <div class="name"><?= htmlspecialchars($room['nome'], ENT_QUOTES, 'UTF-8') ?></div>
     <div class="subtitle"><?= htmlspecialchars($meta['subtitle'], ENT_QUOTES, 'UTF-8') ?></div>

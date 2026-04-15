@@ -13,7 +13,7 @@ require_once CLUB61_ROOT . '/config/profile_helper.php';
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Configurações — Club61</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}

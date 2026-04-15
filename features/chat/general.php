@@ -97,7 +97,7 @@ $chatEp = [
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?> — Club61</title>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -196,10 +196,11 @@ body.gm-body{
 .ch-top a:hover{color:#C9A84C}
 .ch-title-wrap{display:flex;align-items:center;gap:8px;flex:1;justify-content:center}
 .ch-title{font-size:1rem;font-weight:700;color:#C9A84C}
-.gm-online-top{
-  display:none;border:1px solid #2a2a2a;background:#111;color:#C9A84C;border-radius:999px;
-  padding:6px 10px;font-size:.75rem;font-weight:700;cursor:pointer;line-height:1;
+.btn-participantes-mobile{
+  display:none;align-items:center;gap:4px;border:1px solid #2a2a2a;background:#111;color:#C9A84C;border-radius:999px;
+  padding:6px 10px;font-size:.75rem;font-weight:700;cursor:pointer;line-height:1;font-family:inherit;
 }
+.btn-participantes-mobile #count-online{font-variant-numeric:tabular-nums}
 .bottomnav{
   position:fixed;left:0;right:0;bottom:0;z-index:300;
   display:flex;align-items:center;justify-content:space-around;
@@ -221,10 +222,10 @@ body.gm-body{
     transform:translateX(-100%);transition:transform .28s ease;box-shadow:8px 0 24px rgba(0,0,0,0.5);
   }
   .uol-sidebar.is-open{transform:translateX(0)}
-  .gm-online-top{display:inline-flex;align-items:center}
+  .btn-participantes-mobile{display:inline-flex}
 }
 @media (min-width:768px){
-  .gm-online-top{display:none!important}
+  .btn-participantes-mobile{display:none!important}
   .uol-sidebar{position:relative;transform:none!important;box-shadow:none}
 }
 </style>
@@ -234,7 +235,9 @@ body.gm-body{
 <header class="ch-top">
   <a href="/features/chat/salas.php" aria-label="Voltar às salas">←</a>
   <div class="ch-title-wrap"><span aria-hidden="true"><?= htmlspecialchars($roomMeta['emoji'], ENT_QUOTES, 'UTF-8') ?></span><span class="ch-title"><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?></span></div>
-  <button type="button" class="gm-online-top" id="gmOnlineTop" aria-controls="uolSidebar">👥 Participantes</button>
+  <button type="button" class="btn-participantes-mobile" id="btnParticipantesMobile" onclick="toggleParticipantes()" aria-controls="uolSidebar" aria-expanded="false" title="Ver participantes online">
+    👥 <span id="count-online"><?= (int) count($initialOnline) ?></span> online
+  </button>
   <a href="/features/chat/inbox.php" aria-label="Mensagens">✉️</a>
 </header>
 
@@ -527,8 +530,11 @@ foreach ($initialMessages as $m):
   function renderSideList(users) {
     var title = document.getElementById('uolSideTitle');
     var list = document.getElementById('uolSideList');
+    var n = users ? users.length : 0;
+    var countOnline = document.getElementById('count-online');
+    if (countOnline) countOnline.textContent = String(n);
     if (!title || !list) return;
-    title.textContent = 'Participantes (' + (users ? users.length : 0) + ')';
+    title.textContent = 'Participantes (' + n + ')';
     if (!users || !users.length) {
       list.innerHTML = '<p style="font-size:0.78rem;color:#AAAAAA;line-height:1.4;padding:4px">Ninguém na sala nos últimos 2 min.</p>';
       return;
@@ -661,21 +667,22 @@ foreach ($initialMessages as $m):
   atualizarOnline();
 
   var side = document.getElementById('uolSidebar');
-  var fab = document.getElementById('gmOnlineTop');
+  var btnPart = document.getElementById('btnParticipantesMobile');
   var back = document.getElementById('uolSidebarBackdrop');
   function closeSide() {
     if (side) side.classList.remove('is-open');
     if (back) back.classList.remove('is-on');
+    if (btnPart) btnPart.setAttribute('aria-expanded', 'false');
   }
   function openSide() {
     if (side) side.classList.add('is-open');
     if (back) back.classList.add('is-on');
+    if (btnPart) btnPart.setAttribute('aria-expanded', 'true');
   }
-  if (fab && side) {
-    fab.addEventListener('click', function () {
-      if (side.classList.contains('is-open')) closeSide(); else openSide();
-    });
-  }
+  window.toggleParticipantes = function () {
+    if (!side) return;
+    if (side.classList.contains('is-open')) closeSide(); else openSide();
+  };
   if (back) back.addEventListener('click', closeSide);
 })();
 </script>

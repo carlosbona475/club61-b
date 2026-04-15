@@ -1,14 +1,13 @@
 <?php
 
-
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
-require_once CLUB61_ROOT . '/config/profile_helper.php';
-require_once CLUB61_ROOT . '/config/online.php';
+require_once CLUB61_ROOT . '/config/city_rooms.php';
+require_once __DIR__ . '/chat_backend.php';
 
 $current_user_id = trim((string) ($_SESSION['user_id'] ?? ''));
 $access_token = trim((string) ($_SESSION['access_token'] ?? ''));
@@ -18,213 +17,27 @@ if ($current_user_id === '' || $access_token === '' || !defined('SUPABASE_SERVIC
     exit;
 }
 
-require_once CLUB61_ROOT . '/config/city_rooms.php';
-
-$sala = '';
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $sala = trim((string) ($_POST['sala'] ?? ''));
-} else {
-    $sala = trim((string) ($_GET['sala'] ?? ''));
-}
+$sala = trim((string) ($_GET['sala'] ?? ''));
 $roomMeta = club61_city_room_by_slug($sala);
 if ($roomMeta === null) {
     header('Location: /features/chat/salas.php');
     exit;
 }
 
-function chat_service_headers(bool $json = false): array
+function club61_chat_format_hhmm(?string $iso): string
 {
-    $h = [
-        'apikey: ' . SUPABASE_SERVICE_KEY,
-        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
-        'Accept: application/json',
-    ];
-    if ($json) {
-        $h[] = 'Content-Type: application/json';
+    if ($iso === null || $iso === '') {
+        return '';
     }
+    try {
+        $d = new DateTimeImmutable($iso);
+        $d = $d->setTimezone(new DateTimeZone('America/Sao_Paulo'));
 
-    return $h;
-}
-
-function clLabel(array $author): string
-{
-    $disp = isset($author['display_id']) ? trim((string) $author['display_id']) : '';
-
-    return club61_display_id_label($disp);
-}
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $content  = trim($_POST['content'] ?? '');
-    $media_url  = null;
-    $media_type = null;
-
-    // Upload de mídia se houver arquivo
-    if (isset($_FILES['media']) && $_FILES['media']['error'] === UPLOAD_ERR_OK) {
-        $file     = $_FILES['media'];
-        $allowed  = ['image/jpeg','image/png','image/webp','image/gif','video/mp4','video/webm'];
-        $extMap   = ['image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp','image/gif'=>'gif','video/mp4'=>'mp4','video/webm'=>'webm'];
-        $mime     = mime_content_type($file['tmp_name']);
-        if (in_array($mime, $allowed, true) && $file['size'] <= 20 * 1024 * 1024) {
-            $filename = uniqid('gm_', true) . '.' . $extMap[$mime];
-            $binary   = file_get_contents($file['tmp_name']);
-            $upUrl    = SUPABASE_URL . '/storage/v1/object/chat-media/' . $filename;
-            $chUp = curl_init($upUrl);
-            curl_setopt_array($chUp, [
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_POST           => true,
-                CURLOPT_POSTFIELDS     => $binary,
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => false,
-                CURLOPT_HTTPHEADER     => [
-                    'apikey: '         . SUPABASE_SERVICE_KEY,
-                    'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
-                    'Content-Type: '   . $mime,
-                    'x-upsert: true',
-                ],
-            ]);
-            curl_exec($chUp);
-            $upCode = curl_getinfo($chUp, CURLINFO_HTTP_CODE);
-            curl_close($chUp);
-            if ($upCode >= 200 && $upCode < 300) {
-                $media_url  = SUPABASE_URL . '/storage/v1/object/public/chat-media/' . $filename;
-                $media_type = $mime;
-            }
-        }
-    }
-
-    // Só envia se tiver texto ou mídia
-    if ($content !== '' || $media_url !== null) {
-        $payload = json_encode([
-            'user_id'    => $current_user_id,
-            'content'    => $content,
-            'media_url'  => $media_url,
-            'media_type' => $media_type,
-            'sala'       => $sala,
-        ], JSON_UNESCAPED_SLASHES);
-        $sk = SUPABASE_SERVICE_KEY;
-        $ch = curl_init(SUPABASE_URL . '/rest/v1/general_messages');
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_POST           => true,
-            CURLOPT_POSTFIELDS     => $payload,
-            CURLOPT_SSL_VERIFYPEER => false,
-            CURLOPT_SSL_VERIFYHOST => false,
-            CURLOPT_HTTPHEADER     => [
-                'apikey: '         . $sk,
-                'Authorization: Bearer ' . $sk,
-                'Content-Type: application/json',
-                'Prefer: return=minimal',
-            ],
-        ]);
-        curl_exec($ch);
-        curl_close($ch);
-    }
-    header('Location: /features/chat/general.php?' . http_build_query(['sala' => $sala]));
-    exit;
-}
-
-$messages = [];
-$url = SUPABASE_URL . '/rest/v1/general_messages?select=id,user_id,content,media_url,media_type,created_at'
-    . '&sala=eq.' . rawurlencode($sala)
-    . '&order=created_at.desc&limit=60';
-$ch = curl_init($url);
-curl_setopt_array($ch, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_SSL_VERIFYHOST => false,
-    CURLOPT_HTTPHEADER => chat_service_headers(false),
-    CURLOPT_HTTPGET => true,
-]);
-$raw = curl_exec($ch);
-$code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-curl_close($ch);
-if ($raw !== false && $code >= 200 && $code < 300) {
-    $decoded = json_decode($raw, true);
-    if (is_array($decoded)) {
-        $messages = array_reverse($decoded);
+        return $d->format('H:i');
+    } catch (Exception $e) {
+        return '';
     }
 }
-
-$salaParticipantIds = [];
-foreach ($messages as $m) {
-    $uid = isset($m['user_id']) ? (string) $m['user_id'] : '';
-    if ($uid !== '') {
-        $salaParticipantIds[$uid] = true;
-    }
-}
-$salaParticipantIds[$current_user_id] = true;
-
-$partUrl = SUPABASE_URL . '/rest/v1/general_messages?sala=eq.' . rawurlencode($sala)
-    . '&select=user_id&order=created_at.desc&limit=500';
-$chPart = curl_init($partUrl);
-curl_setopt_array($chPart, [
-    CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_SSL_VERIFYPEER => false,
-    CURLOPT_SSL_VERIFYHOST => false,
-    CURLOPT_HTTPHEADER => chat_service_headers(false),
-    CURLOPT_HTTPGET => true,
-]);
-$rawPart = curl_exec($chPart);
-$codePart = curl_getinfo($chPart, CURLINFO_HTTP_CODE);
-curl_close($chPart);
-if ($rawPart !== false && $codePart >= 200 && $codePart < 300) {
-    $partRows = json_decode($rawPart, true);
-    if (is_array($partRows)) {
-        foreach ($partRows as $pr) {
-            $u = isset($pr['user_id']) ? (string) $pr['user_id'] : '';
-            if ($u !== '') {
-                $salaParticipantIds[$u] = true;
-            }
-        }
-    }
-}
-
-$idList = array_keys($salaParticipantIds);
-$profilesById = [];
-if ($idList !== []) {
-    $inList = implode(',', $idList);
-    $pUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url,last_seen&id=in.(' . $inList . ')';
-    $chP = curl_init($pUrl);
-    curl_setopt_array($chP, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_HTTPHEADER => chat_service_headers(false),
-        CURLOPT_HTTPGET => true,
-    ]);
-    $rawP = curl_exec($chP);
-    $codeP = curl_getinfo($chP, CURLINFO_HTTP_CODE);
-    curl_close($chP);
-    if ($rawP !== false && $codeP >= 200 && $codeP < 300) {
-        $rows = json_decode($rawP, true);
-        if (is_array($rows)) {
-            foreach ($rows as $row) {
-                if (isset($row['id'])) {
-                    $profilesById[(string) $row['id']] = $row;
-                }
-            }
-        }
-    }
-}
-
-$sidebarOnline = [];
-foreach ($idList as $pid) {
-    $row = $profilesById[$pid] ?? null;
-    if ($row === null) {
-        continue;
-    }
-    $ls = isset($row['last_seen']) ? (string) $row['last_seen'] : null;
-    if (isUserOnline($ls, 180)) {
-        $sidebarOnline[] = ['id' => $pid, 'row' => $row];
-    }
-}
-usort($sidebarOnline, static function (array $a, array $b): int {
-    $da = isset($a['row']['display_id']) ? trim((string) $a['row']['display_id']) : '';
-    $db = isset($b['row']['display_id']) ? trim((string) $b['row']['display_id']) : '';
-
-    return strcasecmp($da, $db);
-});
-$sidebarOnlineCount = count($sidebarOnline);
 
 function gm_date_key(?string $iso): string
 {
@@ -234,7 +47,7 @@ function gm_date_key(?string $iso): string
     try {
         $d = new DateTimeImmutable($iso);
 
-        return $d->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d');
+        return $d->setTimezone(new DateTimeZone('America/Sao_Paulo'))->format('Y-m-d');
     } catch (Exception $e) {
         return '';
     }
@@ -242,7 +55,7 @@ function gm_date_key(?string $iso): string
 
 function date_divider_label(string $dayKey): string
 {
-    $today = (new DateTimeImmutable('now'))->format('Y-m-d');
+    $today = (new DateTimeImmutable('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
     if ($dayKey === $today) {
         return 'Hoje';
     }
@@ -257,6 +70,28 @@ function date_divider_label(string $dayKey): string
         return $dayKey;
     }
 }
+
+$initialRows = club61_chat_fetch_messages_for_sala($sala, null, 100);
+$initialMessages = club61_chat_enrich_messages($initialRows);
+$initialOnline = club61_chat_online_in_sala($sala, 120);
+
+$meProf = club61_chat_fetch_profiles_by_ids([$current_user_id]);
+$myMemberLine = isset($meProf[$current_user_id]) ? club61_chat_member_line($meProf[$current_user_id]) : '';
+
+$lastIso = '';
+if ($initialMessages !== []) {
+    $last = $initialMessages[count($initialMessages) - 1];
+    $lastIso = isset($last['created_at']) ? (string) $last['created_at'] : '';
+}
+
+$chatApi = '/features/chat/chat_actions.php';
+$chatEp = [
+    'messages' => $chatApi . '?r=messages',
+    'send' => $chatApi . '?r=send',
+    'react' => $chatApi . '?r=react',
+    'online' => $chatApi . '?r=online',
+    'presence' => $chatApi . '?r=presence',
+];
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -273,104 +108,103 @@ body.gm-body{
   max-width:none;margin:0 auto;width:100%;min-height:100dvh;
   padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));
 }
-.gm-shell{
-  flex:1;display:flex;flex-direction:column;min-height:0;width:100%;
-  max-width:900px;margin:0 auto;align-items:stretch;
+.uol-wrap{
+  flex:1;display:flex;flex-direction:row;min-height:0;width:100%;
+  max-width:1200px;margin:0 auto;align-items:stretch;
 }
-.gm-main-col{flex:1;min-width:0;max-width:700px;display:flex;flex-direction:column;width:100%;margin:0 auto}
-.ch-main{flex:1;display:flex;flex-direction:column;min-height:0;width:100%;max-width:700px;margin:0 auto}
-.gm-sidebar{
-  display:none;flex-direction:column;flex-shrink:0;width:180px;background:#111;
-  border-left:1px solid #222;padding:12px 10px 16px;gap:10px;overflow-y:auto;
+.uol-sidebar{
+  flex:0 0 220px;width:220px;min-width:0;
+  background:#111111;border-right:1px solid #2a2a2a;
+  display:flex;flex-direction:column;min-height:0;
 }
-.gm-sidebar-title{font-size:0.78rem;font-weight:800;color:#C9A84C;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px}
-.gm-side-item{width:100%}
-.gm-side-link{
-  display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:8px;text-decoration:none;color:#ddd;font-size:0.8rem;position:relative;
+.uol-sidebar-inner{padding:14px 12px 16px;display:flex;flex-direction:column;gap:10px;min-height:0;flex:1}
+.uol-side-title{
+  font-size:0.82rem;font-weight:800;color:#C9A84C;text-transform:uppercase;letter-spacing:0.06em;
+  flex-shrink:0;padding-bottom:4px;border-bottom:1px solid #2a2a2a;margin-bottom:4px
 }
-.gm-side-link:hover{background:rgba(123,46,255,0.08);color:#fff}
-.gm-side-av{width:36px;height:36px;border-radius:50%;object-fit:cover;background:#0d0d0d;flex-shrink:0;border:1px solid #222}
-.gm-side-ph{width:36px;height:36px;border-radius:50%;background:#0d0d0d;border:1px solid #222;display:flex;align-items:center;justify-content:center;font-size:0.95rem;color:#7B2EFF;flex-shrink:0}
-.gm-side-cl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C9A84C;font-weight:600}
-.gm-side-dot{
-  width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;
-  box-shadow:0 0 0 2px #111;
-  animation:gmPulse 1.35s ease-in-out infinite;
+.uol-side-list{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:6px;min-height:0}
+.uol-side-item{
+  display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:8px;text-decoration:none;
+  color:#ddd;font-size:0.8rem;min-height:40px;
 }
-@keyframes gmPulse{
-  0%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,.55)}
-  70%{transform:scale(1.06);box-shadow:0 0 0 8px rgba(34,197,94,0)}
-  100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0)}
+.uol-side-item:hover{background:rgba(123,46,255,0.08);color:#fff}
+.uol-side-av{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#0d0d0d;flex-shrink:0;border:1px solid #2a2a2a}
+.uol-side-ph{width:32px;height:32px;border-radius:50%;background:#0d0d0d;border:1px solid #2a2a2a;display:flex;align-items:center;justify-content:center;font-size:0.9rem;color:#7B2EFF;flex-shrink:0}
+.uol-side-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;box-shadow:0 0 0 2px #111}
+.uol-side-name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#FFFFFF;font-weight:600;font-size:0.8rem}
+.uol-main{
+  flex:1;min-width:0;display:flex;flex-direction:column;min-height:0;background:#0A0A0A;
 }
-.gm-online-top{
-  display:none;
-  border:1px solid #333;background:#111;color:#C9A84C;border-radius:999px;
-  padding:6px 10px;font-size:.75rem;font-weight:700;cursor:pointer;
+.uol-feed{
+  flex:1;overflow-y:auto;min-height:0;padding:16px 14px 12px;display:flex;flex-direction:column;gap:4px;
+}
+.uol-date{text-align:center;font-size:0.72rem;color:#AAAAAA;margin:14px 0 10px}
+.uol-msg{display:flex;gap:10px;align-items:flex-start;padding:8px 4px;border-radius:10px}
+.uol-msg.is-me{background:rgba(123,46,255,0.06)}
+.uol-msg-av{width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#111;border:1px solid #2a2a2a}
+.uol-msg-av-ph{width:36px;height:36px;border-radius:50%;background:#111;border:1px solid #2a2a2a;display:flex;align-items:center;justify-content:center;color:#7B2EFF;font-size:1rem;flex-shrink:0;text-decoration:none}
+.uol-msg-core{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.uol-msg-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.uol-msg-name{font-size:0.82rem;font-weight:700;color:#C9A84C;text-decoration:none}
+.uol-msg-name:hover{text-decoration:underline}
+.uol-msg-time{font-size:0.72rem;color:#AAAAAA;flex-shrink:0;margin-left:auto}
+.uol-msg-text{font-size:0.92rem;color:#FFFFFF;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.uol-msg-media{margin-top:4px;max-width:min(100%,320px)}
+.uol-msg-media img,.uol-msg-media video{display:block;width:100%;height:auto;border-radius:10px;border:1px solid #2a2a2a}
+.uol-react-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
+.uol-react-btn{
+  display:inline-flex;align-items:center;gap:4px;padding:4px 8px;border-radius:999px;
+  border:1px solid #2a2a2a;background:#151515;color:#fff;font-size:0.85rem;cursor:pointer;
   line-height:1;
 }
-@media (min-width:721px){
-  .gm-shell{flex-direction:row;max-width:900px;width:100%}
-  .gm-main-col{max-width:700px}
-  .gm-sidebar{display:flex}
+.uol-react-btn:hover{border-color:#7B2EFF;background:#1a1225}
+.uol-react-btn.is-on{border-color:#C9A84C;background:rgba(201,168,76,0.12)}
+.uol-react-count{font-size:0.75rem;color:#AAAAAA}
+.uol-inputbar{
+  flex-shrink:0;border-top:1px solid #2a2a2a;background:#0A0A0A;
+  padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
 }
-@media (max-width:720px){
-  .gm-online-top{display:inline-flex;align-items:center}
-  .gm-sidebar{
-    display:flex!important;flex-direction:column;
-    position:fixed;top:0;right:0;bottom:0;width:min(260px,88vw);z-index:400;
-    border-left:1px solid #222;border-top:none;padding-top:56px;
-    transform:translateX(100%);transition:transform .28s ease;box-shadow:-8px 0 24px rgba(0,0,0,0.5);
-  }
-  .gm-sidebar.is-open{transform:translateX(0)}
-  .gm-sidebar-backdrop{
-    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:399;
-  }
-  .gm-sidebar-backdrop.is-on{display:block}
+.uol-preview{
+  display:none;align-items:center;gap:10px;padding:8px 10px;background:#111;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:8px;
 }
+.uol-preview.is-on{display:flex}
+.uol-preview img{max-width:72px;max-height:72px;border-radius:8px;display:none;border:1px solid #2a2a2a}
+.uol-preview img.is-on{display:block}
+.uol-preview-meta{font-size:0.78rem;color:#AAAAAA;flex:1;min-width:0;word-break:break-all}
+.uol-preview-x{background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:1.1rem;padding:4px}
+.uol-input-row{display:flex;gap:8px;align-items:flex-end}
+.uol-btn-ico{
+  width:44px;height:44px;border-radius:12px;border:1px solid #2a2a2a;background:#111;color:#fff;
+  font-size:1.15rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.uol-btn-ico:hover{border-color:#7B2EFF;color:#C9A84C}
+.uol-input{
+  flex:1;min-width:0;background:#111;border:1px solid #2a2a2a;border-radius:12px;color:#fff;padding:10px 12px;
+  font-size:0.95rem;resize:none;max-height:120px;min-height:44px;font-family:inherit;outline:none;
+}
+.uol-input:focus{border-color:#7B2EFF}
+.uol-send{
+  width:44px;height:44px;border-radius:12px;border:none;background:#7B2EFF;color:#fff;font-size:1.1rem;
+  cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.uol-send:hover{filter:brightness(1.08)}
 .ch-top{
   flex-shrink:0;width:100%;display:flex;align-items:center;justify-content:space-between;
-  padding:10px 12px;background:#0A0A0A;border-bottom:1px solid #1a1a1a;gap:8px;
+  padding:10px 12px;background:#0A0A0A;border-bottom:1px solid #2a2a2a;gap:8px;
 }
-.ch-top a{color:#aaa;text-decoration:none;font-size:1.2rem;padding:4px}
+.ch-top a{color:#AAAAAA;text-decoration:none;font-size:1.2rem;padding:4px}
 .ch-top a:hover{color:#C9A84C}
 .ch-title-wrap{display:flex;align-items:center;gap:8px;flex:1;justify-content:center}
 .ch-title{font-size:1rem;font-weight:700;color:#C9A84C}
-.ch-msgs{flex:1;overflow-y:auto;width:100%;padding:22px 16px 16px;display:flex;flex-direction:column;gap:20px;min-height:0;height:calc(100vh - 220px)}
-.date-div{text-align:center;font-size:0.74rem;color:#444;margin:18px 0 14px}
-.msg-row{display:flex;gap:16px;max-width:100%;align-items:flex-end}
-.msg-row.me{justify-content:flex-end}
-.msg-row.them{justify-content:flex-start}
-.msg-stack{display:flex;flex-direction:column;align-items:flex-start;max-width:85%;gap:12px}
-.msg-row.me .msg-stack{align-items:flex-end}
-.msg-av{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;background:#111;border:1px solid #222}
-.msg-av-ph{width:28px;height:28px;min-width:28px;flex-shrink:0;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:#111;border:1px solid #222;color:#7B2EFF;text-decoration:none;font-size:0.85rem}
-.avatar-wrapper{position:relative;display:inline-flex;align-items:center;justify-content:center}
-.online-dot{position:absolute;bottom:2px;right:2px;width:10px;height:10px;background:#00ff88;border-radius:50%;border:2px solid #111}
-.msg-col{flex:1;min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:12px}
-.msg-bub{max-width:85%;padding:18px 22px;font-size:0.95rem;line-height:1.55;word-break:break-word;white-space:pre-wrap}
-.msg-bub.me{background:#7B2EFF;color:#fff;border-radius:18px 4px 18px 18px}
-.msg-bub.them{background:#1e1e1e;color:#ddd;border-radius:4px 18px 18px 18px}
-.msg-meta{font-size:0.72rem;color:#C9A84C;margin-bottom:4px;font-weight:600}
-.msg-meta a{color:inherit;text-decoration:none}
-.ch-foot{
-  flex-shrink:0;width:100%;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
-  background:#0A0A0A;border-top:1px solid #1a1a1a;display:flex;gap:8px;align-items:flex-end;
+.gm-online-top{
+  display:none;border:1px solid #2a2a2a;background:#111;color:#C9A84C;border-radius:999px;
+  padding:6px 10px;font-size:.75rem;font-weight:700;cursor:pointer;line-height:1;
 }
-.ch-foot textarea,.ch-foot .chat-input{
-  flex:1;background:#111;border:1px solid #222;border-radius:12px;color:#fff;padding:10px 12px;font-size:0.95rem;
-  resize:none;max-height:120px;min-height:44px;font-family:inherit;outline:none;
-}
-.ch-foot textarea:focus,.ch-foot .chat-input:focus{border-color:#7B2EFF}
-.ch-send,.btn-send{
-  width:44px;height:44px;border-radius:50%;border:none;background:#7B2EFF;color:#fff;font-size:1.1rem;cursor:pointer;
-  flex-shrink:0;display:flex;align-items:center;justify-content:center;
-}
-.ch-send:hover,.btn-send:hover{filter:brightness(1.08)}
 .bottomnav{
   position:fixed;left:0;right:0;bottom:0;z-index:300;
   display:flex;align-items:center;justify-content:space-around;
   height:56px;padding:0 4px;padding-bottom:env(safe-area-inset-bottom,0px);
-  background:#0A0A0A;border-top:1px solid #1a1a1a;max-width:480px;margin:0 auto;
+  background:#0A0A0A;border-top:1px solid #2a2a2a;max-width:480px;margin:0 auto;
 }
 .bottomnav a{
   display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -379,175 +213,147 @@ body.gm-body{
 .bottomnav a span:first-child{font-size:1.05rem;line-height:1}
 .bottomnav a:hover{color:#ccc}
 .bottomnav a.is-active{color:#7B2EFF}
+.uol-sidebar-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:399}
+.uol-sidebar-backdrop.is-on{display:block}
+@media (max-width:767px){
+  .uol-sidebar{
+    position:fixed;top:0;left:0;bottom:0;width:min(260px,88vw);z-index:400;
+    transform:translateX(-100%);transition:transform .28s ease;box-shadow:8px 0 24px rgba(0,0,0,0.5);
+  }
+  .uol-sidebar.is-open{transform:translateX(0)}
+  .gm-online-top{display:inline-flex;align-items:center}
+}
+@media (min-width:768px){
+  .gm-online-top{display:none!important}
+  .uol-sidebar{position:relative;transform:none!important;box-shadow:none}
+}
 </style>
 </head>
-<body class="gm-body">
+<body class="gm-body" data-my-line="<?= htmlspecialchars($myMemberLine, ENT_QUOTES, 'UTF-8') ?>">
 
 <header class="ch-top">
   <a href="/features/chat/salas.php" aria-label="Voltar às salas">←</a>
   <div class="ch-title-wrap"><span aria-hidden="true"><?= htmlspecialchars($roomMeta['emoji'], ENT_QUOTES, 'UTF-8') ?></span><span class="ch-title"><?= htmlspecialchars($roomMeta['nome'], ENT_QUOTES, 'UTF-8') ?></span></div>
-  <button type="button" class="gm-online-top" id="gmOnlineTop" aria-controls="gmSidebar">👥 <?= (int) $sidebarOnlineCount ?> online</button>
+  <button type="button" class="gm-online-top" id="gmOnlineTop" aria-controls="uolSidebar">👥 Participantes</button>
   <a href="/features/chat/inbox.php" aria-label="Mensagens">✉️</a>
 </header>
 
-<div class="gm-shell">
-<div class="gm-main-col">
-<div class="ch-main">
-<div class="ch-msgs" id="msgScroll">
+<div class="uol-wrap">
+  <aside class="uol-sidebar" id="uolSidebar" aria-label="Participantes online">
+    <div class="uol-sidebar-inner">
+      <div class="uol-side-title" id="uolSideTitle">Participantes (<?= (int) count($initialOnline) ?>)</div>
+      <div class="uol-side-list" id="uolSideList">
+<?php if ($initialOnline === []): ?>
+        <p style="font-size:0.78rem;color:#AAAAAA;line-height:1.4;padding:4px">Ninguém na sala nos últimos 2 min. Abra o chat para registrar presença.</p>
+<?php else: ?>
+<?php foreach ($initialOnline as $ou):
+    $oid = (string) ($ou['user_id'] ?? '');
+    $href = '/features/profile/view.php?id=' . rawurlencode($oid);
+    $av = trim((string) ($ou['avatar_url'] ?? ''));
+    $line = htmlspecialchars((string) ($ou['member_line'] ?? ''), ENT_QUOTES, 'UTF-8');
+    ?>
+        <a class="uol-side-item" href="<?= htmlspecialchars($href, ENT_QUOTES, 'UTF-8') ?>">
+          <span class="uol-side-dot" aria-hidden="true"></span>
+          <?php if ($av !== ''): ?>
+          <img class="uol-side-av" src="<?= htmlspecialchars($av, ENT_QUOTES, 'UTF-8') ?>" alt="">
+          <?php else: ?>
+          <span class="uol-side-ph" aria-hidden="true">&#128100;</span>
+          <?php endif; ?>
+          <span class="uol-side-name"><?= $line ?></span>
+        </a>
+<?php endforeach; ?>
+<?php endif; ?>
+      </div>
+    </div>
+  </aside>
+
+  <section class="uol-main" aria-label="Conversa">
+    <div class="uol-feed" id="chatFeed" data-sala="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
 <?php
 $prevDay = null;
-$prevAuthor = null;
-foreach ($messages as $m):
+foreach ($initialMessages as $m):
     $mid = isset($m['user_id']) ? (string) $m['user_id'] : '';
-    $isMe = $mid === $current_user_id;
     $created = isset($m['created_at']) ? (string) $m['created_at'] : '';
     $dayKey = gm_date_key($created);
     if ($dayKey !== '' && $dayKey !== $prevDay):
         $prevDay = $dayKey;
         ?>
-  <div class="date-div"><?= htmlspecialchars(date_divider_label($dayKey), ENT_QUOTES, 'UTF-8') ?></div>
+      <div class="uol-date"><?= htmlspecialchars(date_divider_label($dayKey), ENT_QUOTES, 'UTF-8') ?></div>
 <?php
     endif;
-    $author = ($mid !== '' && isset($profilesById[$mid])) ? $profilesById[$mid] : [];
-    $label = $author !== [] ? clLabel($author) : club61_display_id_label(null);
-    $avatar = ($author !== [] && !empty($author['avatar_url'])) ? trim((string) $author['avatar_url']) : '';
-    $lastSeen = ($author !== [] && isset($author['last_seen'])) ? (string) $author['last_seen'] : null;
-    $isOnline = isUserOnline($lastSeen);
-    $profileUrl = '/features/profile/view.php?id=' . rawurlencode($mid);
-    $showHeader = !$isMe && ($prevAuthor !== $mid);
-    $prevAuthor = $mid;
-    $content = isset($m['content']) ? (string) $m['content'] : '';
+    $isMe = $mid === $current_user_id;
+    $author = isset($m['author']) && is_array($m['author']) ? $m['author'] : [];
+    $memberLine = htmlspecialchars((string) ($author['member_line'] ?? 'Membro'), ENT_QUOTES, 'UTF-8');
+    $profUrl = '/features/profile/view.php?id=' . rawurlencode($mid);
+    $av = isset($author['avatar_url']) ? trim((string) $author['avatar_url']) : '';
+    $tipo = isset($m['tipo']) ? (string) $m['tipo'] : 'texto';
+    $isMedia = ($tipo === 'imagem' || $tipo === 'video');
+    $msgId = isset($m['id']) ? (string) $m['id'] : '';
+    $conteudo = isset($m['conteudo']) ? (string) $m['conteudo'] : '';
+    $mediaUrl = isset($m['media_url']) ? trim((string) $m['media_url']) : '';
+    $reactions = isset($m['reactions']) && is_array($m['reactions']) ? $m['reactions'] : [];
+    $allowedReact = CLUB61_CHAT_ALLOWED_REACTION_EMOJIS;
     ?>
-  <div class="msg-row <?= $isMe ? 'me' : 'them' ?>">
-    <?php if (!$isMe): ?>
-      <?php if ($showHeader): ?>
-        <?php if ($avatar !== ''): ?>
-    <a class="avatar-wrapper" href="<?= htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8') ?>">
-      <img class="msg-av" src="<?= htmlspecialchars($avatar, ENT_QUOTES, 'UTF-8') ?>" alt="">
-      <?php if ($isOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?>
-    </a>
+      <article class="uol-msg<?= $isMe ? ' is-me' : '' ?>" data-msg-id="<?= htmlspecialchars($msgId, ENT_QUOTES, 'UTF-8') ?>">
+        <?php if ($av !== ''): ?>
+        <a href="<?= htmlspecialchars($profUrl, ENT_QUOTES, 'UTF-8') ?>"><img class="uol-msg-av" src="<?= htmlspecialchars($av, ENT_QUOTES, 'UTF-8') ?>" alt=""></a>
         <?php else: ?>
-    <a class="msg-av-ph avatar-wrapper" href="<?= htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8') ?>" aria-label="Perfil">
-      <span aria-hidden="true">&#128100;</span>
-      <?php if ($isOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?>
-    </a>
+        <a class="uol-msg-av-ph" href="<?= htmlspecialchars($profUrl, ENT_QUOTES, 'UTF-8') ?>" aria-label="Perfil">&#128100;</a>
         <?php endif; ?>
-    <div class="msg-col">
-      <div class="msg-meta"><a href="<?= htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></a></div>
-      <div class="msg-bub them"><?= htmlspecialchars($content, ENT_QUOTES, 'UTF-8') ?></div>
-      <?php if (!empty($m['media_url'])): ?>
-      <?php $mtype = (string)($m['media_type'] ?? ''); ?>
-      <?php if (str_starts_with($mtype, 'image/')): ?>
-    <img src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-         style="max-width:220px;border-radius:10px;margin-top:6px;display:block;cursor:pointer"
-         onclick="window.open(this.src)">
-      <?php elseif (str_starts_with($mtype, 'video/')): ?>
-    <video controls src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-           style="max-width:220px;border-radius:10px;margin-top:6px;display:block"></video>
-      <?php endif; ?>
-      <?php endif; ?>
-    </div>
-      <?php else: ?>
-    <a class="msg-av-ph avatar-wrapper" href="<?= htmlspecialchars($profileUrl, ENT_QUOTES, 'UTF-8') ?>" aria-label="Perfil">
-      <span aria-hidden="true">&#128100;</span>
-      <?php if ($isOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?>
-    </a>
-    <div class="msg-stack">
-      <div class="msg-bub them"><?= htmlspecialchars($content, ENT_QUOTES, 'UTF-8') ?></div>
-      <?php if (!empty($m['media_url'])): ?>
-      <?php $mtype = (string)($m['media_type'] ?? ''); ?>
-      <?php if (str_starts_with($mtype, 'image/')): ?>
-      <img src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-           style="max-width:220px;border-radius:10px;margin-top:6px;display:block;cursor:pointer"
-           onclick="window.open(this.src)">
-      <?php elseif (str_starts_with($mtype, 'video/')): ?>
-      <video controls src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-             style="max-width:220px;border-radius:10px;margin-top:6px;display:block"></video>
-      <?php endif; ?>
-      <?php endif; ?>
-    </div>
-      <?php endif; ?>
-    <?php else: ?>
-    <div class="msg-stack">
-      <div class="msg-bub me"><?= htmlspecialchars($content, ENT_QUOTES, 'UTF-8') ?></div>
-      <?php if (!empty($m['media_url'])): ?>
-      <?php $mtype = (string)($m['media_type'] ?? ''); ?>
-      <?php if (str_starts_with($mtype, 'image/')): ?>
-      <img src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-           style="max-width:220px;border-radius:10px;margin-top:6px;display:block;cursor:pointer"
-           onclick="window.open(this.src)">
-      <?php elseif (str_starts_with($mtype, 'video/')): ?>
-      <video controls src="<?= htmlspecialchars($m['media_url'], ENT_QUOTES, 'UTF-8') ?>"
-             style="max-width:220px;border-radius:10px;margin-top:6px;display:block"></video>
-      <?php endif; ?>
-      <?php endif; ?>
-    </div>
-    <?php endif; ?>
-  </div>
+        <div class="uol-msg-core">
+          <div class="uol-msg-head">
+            <a class="uol-msg-name" href="<?= htmlspecialchars($profUrl, ENT_QUOTES, 'UTF-8') ?>"><?= $memberLine ?></a>
+            <span class="uol-msg-time"><?= htmlspecialchars(club61_chat_format_hhmm($created), ENT_QUOTES, 'UTF-8') ?></span>
+          </div>
+          <?php if ($conteudo !== ''): ?>
+          <div class="uol-msg-text"><?= htmlspecialchars($conteudo, ENT_QUOTES, 'UTF-8') ?></div>
+          <?php endif; ?>
+          <?php if ($isMedia && $mediaUrl !== ''): ?>
+          <div class="uol-msg-media">
+            <?php if ($tipo === 'imagem'): ?>
+            <a href="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener"><img src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>" alt=""></a>
+            <?php else: ?>
+            <video controls preload="metadata" src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>"></video>
+            <?php endif; ?>
+          </div>
+          <div class="uol-react-row" data-react-for="<?= htmlspecialchars($msgId, ENT_QUOTES, 'UTF-8') ?>">
+            <?php foreach ($allowedReact as $em):
+                $info = $reactions[$em] ?? null;
+                $cnt = is_array($info) && isset($info['count']) ? (int) $info['count'] : 0;
+                $users = is_array($info) && isset($info['users']) && is_array($info['users']) ? $info['users'] : [];
+                $tip = htmlspecialchars(implode(', ', $users), ENT_QUOTES, 'UTF-8');
+                $userReacted = $myMemberLine !== '' && in_array($myMemberLine, $users, true);
+                ?>
+            <button type="button" class="uol-react-btn<?= $userReacted ? ' is-on' : '' ?>" data-emoji="<?= htmlspecialchars($em, ENT_QUOTES, 'UTF-8') ?>" title="<?= $tip !== '' ? $tip : 'Reagir' ?>">
+              <span aria-hidden="true"><?= htmlspecialchars($em, ENT_QUOTES, 'UTF-8') ?></span>
+              <span class="uol-react-count"><?= $cnt > 0 ? (int) $cnt : '' ?></span>
+            </button>
+            <?php endforeach; ?>
+          </div>
+          <?php endif; ?>
+        </div>
+      </article>
 <?php endforeach; ?>
-</div>
-
-<div class="ch-foot">
-<form method="POST" action="/features/chat/general.php?<?= htmlspecialchars(http_build_query(['sala' => $sala]), ENT_QUOTES, 'UTF-8') ?>" enctype="multipart/form-data" style="display:contents" id="msgForm">
-  <input type="hidden" name="sala" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
-  <input type="file" id="gmFile" name="media"
-         accept="image/*,video/mp4,video/webm" style="display:none">
-  <button type="button" id="gmFileBtn"
-          style="background:none;border:none;color:#555;font-size:1.3rem;
-                 cursor:pointer;padding:4px;flex-shrink:0;transition:color .15s"
-          onmouseover="this.style.color='#fff'"
-          onmouseout="this.style.color='#555'"
-          onclick="document.getElementById('gmFile').click()">📎</button>
-  <div style="flex:1;position:relative">
-    <div id="gmPreview" style="display:none;align-items:center;gap:8px;
-         padding:6px 10px;background:#151515;border-radius:10px;margin-bottom:6px">
-      <img id="gmPreviewImg" style="max-width:60px;max-height:60px;
-           border-radius:6px;display:none">
-      <span id="gmPreviewName" style="font-size:0.8rem;color:#aaa"></span>
-      <button type="button" onclick="clearGmFile()"
-              style="background:none;border:none;color:#ff6b6b;
-                     cursor:pointer;font-size:1rem;margin-left:auto">✕</button>
     </div>
-    <textarea class="chat-input" name="content" id="msgInput"
-              placeholder="Mensagem para o clube..."
-              rows="1" maxlength="1000" autocomplete="off"></textarea>
-  </div>
-  <button class="btn-send" type="submit">&#10148;</button>
-</form>
-</div>
-</div>
-</div>
 
-<aside class="gm-sidebar" id="gmSidebar" aria-label="Online nesta sala">
-  <div class="gm-sidebar-title">Na sala</div>
-  <?php if ($sidebarOnlineCount === 0): ?>
-  <p style="font-size:0.78rem;color:#555;line-height:1.4;margin:4px 0 0">Ninguém com atividade recente (últimos 3 min).</p>
-  <?php else: ?>
-    <?php foreach ($sidebarOnline as $ent):
-        $spid = (string) $ent['id'];
-        $sr = $ent['row'];
-        $slab = clLabel($sr);
-        $sav = isset($sr['avatar_url']) ? trim((string) $sr['avatar_url']) : '';
-        $sls = isset($sr['last_seen']) ? (string) $sr['last_seen'] : null;
-        $sOn = isUserOnline($sls, 180);
-        $sProf = '/features/profile/view.php?id=' . rawurlencode($spid);
-        ?>
-  <div class="gm-side-item">
-    <a class="gm-side-link" href="<?= htmlspecialchars($sProf, ENT_QUOTES, 'UTF-8') ?>">
-      <?php if ($sav !== ''): ?>
-      <img class="gm-side-av" src="<?= htmlspecialchars($sav, ENT_QUOTES, 'UTF-8') ?>" alt="">
-      <?php else: ?>
-      <span class="gm-side-ph" aria-hidden="true">&#128100;</span>
-      <?php endif; ?>
-      <span class="gm-side-cl"><?= htmlspecialchars($slab, ENT_QUOTES, 'UTF-8') ?></span>
-      <?php if ($sOn): ?><span class="gm-side-dot" title="Online"></span><?php endif; ?>
-    </a>
-  </div>
-    <?php endforeach; ?>
-  <?php endif; ?>
-</aside>
+    <div class="uol-inputbar">
+      <div class="uol-preview" id="uolPreview">
+        <img id="uolPreviewImg" class="" src="" alt="">
+        <span class="uol-preview-meta" id="uolPreviewMeta"></span>
+        <button type="button" class="uol-preview-x" id="uolPreviewClear" aria-label="Remover mídia">✕</button>
+      </div>
+      <div class="uol-input-row">
+        <input type="file" id="uolFile" name="media" accept="image/*,video/mp4,video/webm" style="display:none">
+        <input type="file" id="uolCam" accept="image/*" capture="environment" style="display:none">
+        <button type="button" class="uol-btn-ico" id="uolBtnClip" title="Anexar">📎</button>
+        <button type="button" class="uol-btn-ico" id="uolBtnCam" title="Foto">📷</button>
+        <textarea class="uol-input" id="msgInput" rows="1" maxlength="1000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea>
+        <button type="button" class="uol-send" id="uolSend" title="Enviar" aria-label="Enviar">&#10148;</button>
+      </div>
+    </div>
+  </section>
 </div>
-<div class="gm-sidebar-backdrop" id="gmSidebarBackdrop" aria-hidden="true"></div>
+<div class="uol-sidebar-backdrop" id="uolSidebarBackdrop" aria-hidden="true"></div>
 
 <nav class="bottomnav" aria-label="Navegação">
   <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
@@ -557,93 +363,320 @@ foreach ($messages as $m):
   <a href="/features/auth/logout.php"><span>🚪</span>Sair</a>
 </nav>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
-(function(){
-  var box = document.getElementById('msgScroll');
-  if (box) box.scrollTop = box.scrollHeight;
+(function () {
+  var sala = <?= json_encode($sala, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var currentUserId = <?= json_encode($current_user_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var EP = <?= json_encode($chatEp, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var lastIso = <?= json_encode($lastIso, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var allowedReact = <?= json_encode(CLUB61_CHAT_ALLOWED_REACTION_EMOJIS, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var myLineAttr = document.body.getAttribute('data-my-line') || '';
+
+  function $(sel) { return document.querySelector(sel); }
+  function feedEl() { return document.getElementById('chatFeed'); }
+
+  function scrollFeedBottom() {
+    var box = feedEl();
+    if (box) box.scrollTop = box.scrollHeight;
+  }
+
+  function esc(s) {
+    if (!s) return '';
+    var d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '';
+    try {
+      var d = new Date(iso);
+      return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch (e) { return ''; }
+  }
+
+  function buildMsgRow(m) {
+    var author = m.author || {};
+    var uid = m.user_id || '';
+    var isMe = uid === currentUserId;
+    var prof = '/features/profile/view.php?id=' + encodeURIComponent(uid);
+    var av = (author.avatar_url || '').trim();
+    var line = author.member_line || 'Membro';
+    var tipo = m.tipo || 'texto';
+    var isMedia = tipo === 'imagem' || tipo === 'video';
+    var msgId = m.id || '';
+    var html = '';
+    html += '<article class="uol-msg' + (isMe ? ' is-me' : '') + '" data-msg-id="' + esc(msgId) + '">';
+    if (av) {
+      html += '<a href="' + esc(prof) + '"><img class="uol-msg-av" src="' + esc(av) + '" alt=""></a>';
+    } else {
+      html += '<a class="uol-msg-av-ph" href="' + esc(prof) + '" aria-label="Perfil">&#128100;</a>';
+    }
+    html += '<div class="uol-msg-core">';
+    html += '<div class="uol-msg-head">';
+    html += '<a class="uol-msg-name" href="' + esc(prof) + '">' + esc(line) + '</a>';
+    html += '<span class="uol-msg-time">' + esc(fmtTime(m.created_at)) + '</span>';
+    html += '</div>';
+    if (m.conteudo) {
+      html += '<div class="uol-msg-text">' + esc(m.conteudo) + '</div>';
+    }
+    if (isMedia && m.media_url) {
+      html += '<div class="uol-msg-media">';
+      if (tipo === 'imagem') {
+        html += '<a href="' + esc(m.media_url) + '" target="_blank" rel="noopener"><img src="' + esc(m.media_url) + '" alt=""></a>';
+      } else {
+        html += '<video controls preload="metadata" src="' + esc(m.media_url) + '"></video>';
+      }
+      html += '</div>';
+      html += renderReactions(msgId, m.reactions || {});
+    }
+    html += '</div></article>';
+    return html;
+  }
+
+  function renderReactions(msgId, reactMap) {
+    var html = '<div class="uol-react-row" data-react-for="' + esc(msgId) + '">';
+    for (var i = 0; i < allowedReact.length; i++) {
+      var em = allowedReact[i];
+      var info = reactMap[em] || {};
+      var cnt = info.count || 0;
+      var users = info.users || [];
+      var tip = users.join(', ');
+      var userReacted = users.indexOf(getMyMemberLine()) >= 0;
+      html += '<button type="button" class="uol-react-btn' + (userReacted ? ' is-on' : '') + '" data-emoji="' + esc(em) + '" title="' + esc(tip || 'Reagir') + '">';
+      html += '<span aria-hidden="true">' + esc(em) + '</span>';
+      html += '<span class="uol-react-count">' + (cnt > 0 ? String(cnt) : '') + '</span>';
+      html += '</button>';
+    }
+    html += '</div>';
+    return html;
+  }
+
+  var cachedMemberLine = null;
+  function getMyMemberLine() {
+    if (myLineAttr) return myLineAttr;
+    if (cachedMemberLine) return cachedMemberLine;
+    var nodes = feedEl().querySelectorAll('.uol-msg.is-me .uol-msg-name');
+    if (nodes.length) {
+      cachedMemberLine = nodes[0].textContent.trim();
+      return cachedMemberLine;
+    }
+    return '';
+  }
+
+  function appendMessages(list) {
+    if (!list || !list.length) return;
+    var box = feedEl();
+    var html = '';
+    for (var i = 0; i < list.length; i++) {
+      var mid = list[i].id || '';
+      if (mid && box.querySelector('[data-msg-id="' + mid + '"]')) continue;
+      html += buildMsgRow(list[i]);
+      lastIso = list[i].created_at || lastIso;
+    }
+    if (html) {
+      box.insertAdjacentHTML('beforeend', html);
+      bindReactButtons(box);
+      scrollFeedBottom();
+    }
+  }
+
+  function bindReactButtons(root) {
+    root.querySelectorAll('.uol-react-btn').forEach(function (btn) {
+      if (btn.dataset.bound) return;
+      btn.dataset.bound = '1';
+      btn.addEventListener('click', function () {
+        var row = btn.closest('.uol-react-row');
+        if (!row) return;
+        var mid = row.getAttribute('data-react-for');
+        var emoji = btn.getAttribute('data-emoji');
+        fetch(EP.react, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message_id: mid, emoji: emoji })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+          if (!data || !data.ok || !data.reactions) return;
+          row.querySelectorAll('.uol-react-btn').forEach(function (b) {
+            var em = b.getAttribute('data-emoji');
+            var inf = data.reactions[em];
+            var cnt = inf && inf.count ? inf.count : 0;
+            var users = inf && inf.users ? inf.users : [];
+            b.querySelector('.uol-react-count').textContent = cnt > 0 ? String(cnt) : '';
+            b.title = users.join(', ') || 'Reagir';
+            var reacted = users.indexOf(getMyMemberLine()) !== -1;
+            b.classList.toggle('is-on', reacted);
+          });
+        }).catch(function () {});
+      });
+    });
+  }
+
+  function carregarMensagens() {
+    var url = EP.messages + '?sala_id=' + encodeURIComponent(sala);
+    if (lastIso) url += '&after=' + encodeURIComponent(lastIso);
+    fetch(url, { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok || !data.messages) return;
+        appendMessages(data.messages);
+      })
+      .catch(function () {});
+  }
+
+  function renderSideList(users) {
+    var title = document.getElementById('uolSideTitle');
+    var list = document.getElementById('uolSideList');
+    if (!title || !list) return;
+    title.textContent = 'Participantes (' + (users ? users.length : 0) + ')';
+    if (!users || !users.length) {
+      list.innerHTML = '<p style="font-size:0.78rem;color:#AAAAAA;line-height:1.4;padding:4px">Ninguém na sala nos últimos 2 min.</p>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      var oid = u.user_id || '';
+      var href = '/features/profile/view.php?id=' + encodeURIComponent(oid);
+      var av = (u.avatar_url || '').trim();
+      var line = u.member_line || 'Membro';
+      html += '<a class="uol-side-item" href="' + esc(href) + '">';
+      html += '<span class="uol-side-dot" aria-hidden="true"></span>';
+      if (av) {
+        html += '<img class="uol-side-av" src="' + esc(av) + '" alt="">';
+      } else {
+        html += '<span class="uol-side-ph" aria-hidden="true">&#128100;</span>';
+      }
+      html += '<span class="uol-side-name">' + esc(line) + '</span></a>';
+    }
+    list.innerHTML = html;
+  }
+
+  function atualizarOnline() {
+    fetch(EP.online + '?sala_id=' + encodeURIComponent(sala), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok && data.users) renderSideList(data.users);
+      })
+      .catch(function () {});
+  }
+
+  function atualizarPresenca() {
+    fetch(EP.presence, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sala_id: sala })
+    }).catch(function () {});
+  }
+
+  function enviarMensagem() {
+    var ta = document.getElementById('msgInput');
+    var fileEl = document.getElementById('uolFile');
+    var text = (ta && ta.value) ? ta.value.trim() : '';
+    var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
+    if (!text && !hasFile) return;
+    var fd = new FormData();
+    fd.append('sala_id', sala);
+    fd.append('mensagem', text);
+    if (hasFile) fd.append('media', fileEl.files[0]);
+    fetch(EP.send, { method: 'POST', credentials: 'same-origin', body: fd })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!data || !data.ok) return;
+        if (ta) ta.value = '';
+        clearFile();
+        carregarMensagens();
+      })
+      .catch(function () {});
+  }
+
+  function clearFile() {
+    var fileEl = document.getElementById('uolFile');
+    var prev = document.getElementById('uolPreview');
+    var img = document.getElementById('uolPreviewImg');
+    var meta = document.getElementById('uolPreviewMeta');
+    if (fileEl) fileEl.value = '';
+    if (img) { img.src = ''; img.classList.remove('is-on'); }
+    if (meta) meta.textContent = '';
+    if (prev) prev.classList.remove('is-on');
+  }
+
+  document.getElementById('uolBtnClip').addEventListener('click', function () {
+    document.getElementById('uolFile').click();
+  });
+  document.getElementById('uolBtnCam').addEventListener('click', function () {
+    document.getElementById('uolCam').click();
+  });
+  document.getElementById('uolCam').addEventListener('change', function () {
+    var f = this.files && this.files[0];
+    if (!f) return;
+    try {
+      var dt = new DataTransfer();
+      dt.items.add(f);
+      document.getElementById('uolFile').files = dt.files;
+    } catch (e) {}
+    document.getElementById('uolFile').dispatchEvent(new Event('change'));
+  });
+  document.getElementById('uolFile').addEventListener('change', function () {
+    var file = this.files && this.files[0];
+    var prev = document.getElementById('uolPreview');
+    var img = document.getElementById('uolPreviewImg');
+    var meta = document.getElementById('uolPreviewMeta');
+    if (!file) { clearFile(); return; }
+    prev.classList.add('is-on');
+    if (file.type.indexOf('image/') === 0) {
+      var reader = new FileReader();
+      reader.onload = function (e) {
+        img.src = e.target.result;
+        img.classList.add('is-on');
+        meta.textContent = '';
+      };
+      reader.readAsDataURL(file);
+    } else {
+      img.classList.remove('is-on');
+      img.src = '';
+      meta.textContent = '🎥 ' + file.name;
+    }
+  });
+  document.getElementById('uolPreviewClear').addEventListener('click', clearFile);
+  document.getElementById('uolSend').addEventListener('click', enviarMensagem);
   var ta = document.getElementById('msgInput');
-  var gmFile = document.getElementById('gmFile');
   if (ta) {
-    ta.addEventListener('keydown', function(e) {
+    ta.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        var f = document.getElementById('msgForm');
-        var hasFile = gmFile && gmFile.files && gmFile.files.length > 0;
-        if (ta.value.trim() !== '' || hasFile) f.submit();
+        enviarMensagem();
       }
     });
   }
-})();
 
-document.getElementById('gmFile').addEventListener('change', function() {
-  var file = this.files[0];
-  if (!file) return;
-  var preview = document.getElementById('gmPreview');
-  var img     = document.getElementById('gmPreviewImg');
-  var name    = document.getElementById('gmPreviewName');
-  preview.style.display = 'flex';
-  if (file.type.startsWith('image/')) {
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      img.src = e.target.result;
-      img.style.display = 'block';
-    };
-    reader.readAsDataURL(file);
-    name.textContent = '';
-  } else {
-    img.style.display = 'none';
-    name.textContent = '🎥 ' + file.name;
-  }
-});
+  bindReactButtons(document);
+  scrollFeedBottom();
 
-function clearGmFile() {
-  document.getElementById('gmFile').value = '';
-  document.getElementById('gmPreview').style.display = 'none';
-  document.getElementById('gmPreviewImg').src = '';
-  document.getElementById('gmPreviewName').textContent = '';
-}
+  setInterval(carregarMensagens, 3000);
+  setInterval(atualizarOnline, 15000);
+  setInterval(atualizarPresenca, 30000);
+  atualizarPresenca();
+  atualizarOnline();
 
-(function () {
-  if (typeof window.supabase === 'undefined') return;
-  var _sb = window.supabase.createClient(
-    <?= json_encode(SUPABASE_URL, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>,
-    <?= json_encode(SUPABASE_ANON_KEY, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>
-  );
-  var salaSlug = <?= json_encode($sala, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-  var channel = _sb
-    .channel('general-chat-' + salaSlug)
-    .on('postgres_changes', {
-      event: 'INSERT',
-      schema: 'public',
-      table: 'general_messages',
-      filter: 'sala=eq.' + salaSlug,
-    }, function () {
-      window.location.reload();
-    })
-    .subscribe();
-  window.addEventListener('beforeunload', function () {
-    try { _sb.removeChannel(channel); } catch (e) {}
-  });
-})();
-
-(function () {
-  var side = document.getElementById('gmSidebar');
+  var side = document.getElementById('uolSidebar');
   var fab = document.getElementById('gmOnlineTop');
-  var back = document.getElementById('gmSidebarBackdrop');
-  if (!side || !fab) return;
-  function close() {
-    side.classList.remove('is-open');
+  var back = document.getElementById('uolSidebarBackdrop');
+  function closeSide() {
+    if (side) side.classList.remove('is-open');
     if (back) back.classList.remove('is-on');
   }
-  function open() {
-    side.classList.add('is-open');
+  function openSide() {
+    if (side) side.classList.add('is-open');
     if (back) back.classList.add('is-on');
   }
-  fab.addEventListener('click', function () {
-    if (side.classList.contains('is-open')) close(); else open();
-  });
-  if (back) back.addEventListener('click', close);
+  if (fab && side) {
+    fab.addEventListener('click', function () {
+      if (side.classList.contains('is-open')) closeSide(); else openSide();
+    });
+  }
+  if (back) back.addEventListener('click', closeSide);
 })();
 </script>
 </body>

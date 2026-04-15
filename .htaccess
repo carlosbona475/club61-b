@@ -25,4 +25,11 @@ DirectoryIndex index.php index.html
     # Painel admin (atalho)
     RewriteRule ^admin/?$ /features/admin/index.php [L,QSA]
 
+    # API JSON do chat (atalhos /chat/…)
+    RewriteRule ^chat/messages/?$ /features/chat/chat_actions.php [L,QSA]
+    RewriteRule ^chat/send/?$ /features/chat/chat_actions.php [L,QSA]
+    RewriteRule ^chat/react/?$ /features/chat/chat_actions.php [L,QSA]
+    RewriteRule ^chat/online/?$ /features/chat/chat_actions.php [L,QSA]
+    RewriteRule ^chat/presence/?$ /features/chat/chat_actions.php [L,QSA]
+
 </IfModule>

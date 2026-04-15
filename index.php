@@ -1,13 +1,11 @@
 <?php
+declare(strict_types=1);
+
+ini_set('display_errors', '1');
 error_reporting(E_ALL);
-ini_set('display_errors', 1);
 
-session_start();
+require_once dirname(__DIR__) . '/bootstrap/app.php';
+require_once dirname(__DIR__) . '/config/security_headers.php';
 
-if (isset($_SESSION['access_token'])) {
-    header('Location: /features/feed/index.php');
-    exit;
-} else {
-    header('Location: /features/auth/login.php');
-    exit;
-}
+club61_security_headers();
+\Club61\Core\Application::runHttp();

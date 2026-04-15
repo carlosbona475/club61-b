@@ -74,11 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
                 ensureUserProfile($_SESSION['user_id'], $email);
                 admin_invalidate_profile_cache();
                 club61_login_rate_reset();
-                if (isCurrentUserAdmin()) {
-                    header('Location: /features/admin/index.php');
-                } else {
-                    header('Location: /features/feed/index.php');
-                }
+                header('Location: /features/feed/index.php');
                 exit;
             }
             $fail = club61_login_rate_record_failure(8, 900);

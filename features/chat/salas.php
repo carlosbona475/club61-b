@@ -11,6 +11,39 @@ require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/city_rooms.php';
 
 $rooms = club61_city_rooms();
+
+/**
+ * Metadata visual por sala (mantém fallback seguro se surgir nova cidade).
+ *
+ * @return array{emoji:string,subtitle:string}
+ */
+function room_visual_meta(array $room): array
+{
+    $nome = mb_strtolower(trim((string) ($room['nome'] ?? '')), 'UTF-8');
+    if (str_contains($nome, 'presidente prudente')) {
+        return [
+            'emoji' => '🏙️🌆🌃',
+            'subtitle' => 'Bate-papo do Oeste Paulista',
+        ];
+    }
+    if (str_contains($nome, 'maring')) {
+        return [
+            'emoji' => '🌳🌿🍃',
+            'subtitle' => 'Bate-papo da Capital do Noroeste',
+        ];
+    }
+    if (str_contains($nome, 'londrina')) {
+        return [
+            'emoji' => '☀️🌞🌤️',
+            'subtitle' => 'Bate-papo da Capital do Norte',
+        ];
+    }
+
+    return [
+        'emoji' => (string) ($room['emoji'] ?? '🏙️'),
+        'subtitle' => 'Sala oficial do Club61',
+    ];
+}
 ?>
 <!DOCTYPE html>
 <html lang="pt-BR">
@@ -31,22 +64,38 @@ body{
 .header a:hover{color:#C9A84C}
 .header h1{margin:0;font-size:1rem;font-weight:700;color:#C9A84C}
 .grid{
-  display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;padding:24px;max-width:960px;margin:0 auto;
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;padding:28px;max-width:1040px;margin:0 auto;
 }
 .card{
-  background:#111;border:1px solid #222;border-radius:16px;padding:24px 16px;text-align:center;text-decoration:none;color:#fff;
-  transition:transform .2s,box-shadow .2s;display:block;
+  background:#111;border:1px solid #222;border-radius:16px;padding:30px 20px;text-align:center;text-decoration:none;color:#fff;
+  transition:transform .2s,box-shadow .2s,border-color .2s;display:block;min-height:220px;
 }
-.card:hover{transform:translateY(-4px);box-shadow:0 8px 24px rgba(123,46,255,.3)}
+.card:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(123,46,255,.32);border-color:#333}
 .icon{
-  width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:2rem;margin:0 auto 12px;
+  width:100px;height:100px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:3rem;margin:0 auto 16px;
+  box-shadow:0 8px 22px rgba(0,0,0,.35);
 }
-.name{font-weight:700;font-size:1rem;margin-bottom:6px}
-.online{color:#00ff88;font-size:0.8rem;margin-bottom:12px}
+.name{font-weight:800;font-size:1.3rem;margin-bottom:8px;letter-spacing:.01em}
+.subtitle{color:#9a9a9a;font-size:.82rem;line-height:1.4;min-height:36px;margin-bottom:12px}
+.online{
+  color:#9cf7c4;font-size:.85rem;margin-bottom:14px;display:inline-flex;align-items:center;gap:7px;
+  background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.22);padding:5px 10px;border-radius:999px;
+}
+.online-dot{
+  width:9px;height:9px;border-radius:50%;background:#22c55e;display:inline-block;animation:onlinePulse 1.35s ease-in-out infinite;
+  box-shadow:0 0 0 0 rgba(34,197,94,.55);
+}
+@keyframes onlinePulse{
+  0%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,.55)}
+  70%{transform:scale(1.05);box-shadow:0 0 0 8px rgba(34,197,94,0)}
+  100%{transform:scale(1);box-shadow:0 0 0 0 rgba(34,197,94,0)}
+}
 .btn{
-  background:#7B2EFF;color:#fff;border:none;border-radius:10px;padding:8px 20px;font-size:0.9rem;cursor:pointer;width:100%;
-  text-decoration:none;display:inline-block;font-family:inherit;font-weight:700;
+  background:#7B2EFF;color:#fff;border:none;border-radius:12px;padding:12px 22px;font-size:1rem;cursor:pointer;width:100%;
+  text-decoration:none;display:inline-block;font-family:inherit;font-weight:800;transition:box-shadow .22s,transform .15s,filter .18s;
 }
+.btn:hover{box-shadow:0 0 24px rgba(123,46,255,.55),0 0 40px rgba(123,46,255,.2);filter:brightness(1.06)}
+.btn:active{transform:translateY(1px)}
 .bottomnav{
   position:fixed;bottom:0;left:0;right:0;background:#111;border-top:1px solid #222;display:flex;justify-content:space-around;
   padding:8px 0;padding-bottom:calc(8px + env(safe-area-inset-bottom,0px));z-index:300;max-width:960px;margin:0 auto;
@@ -63,12 +112,14 @@ body{
 </div>
 <div class="grid">
 <?php foreach ($rooms as $room): ?>
+  <?php $meta = room_visual_meta($room); ?>
   <a class="card" href="/features/chat/general.php?sala=<?= rawurlencode($room['slug']) ?>">
     <div class="icon" style="background:<?= htmlspecialchars($room['cor'], ENT_QUOTES, 'UTF-8') ?>">
-      <?= htmlspecialchars($room['emoji'], ENT_QUOTES, 'UTF-8') ?>
+      <?= htmlspecialchars($meta['emoji'], ENT_QUOTES, 'UTF-8') ?>
     </div>
     <div class="name"><?= htmlspecialchars($room['nome'], ENT_QUOTES, 'UTF-8') ?></div>
-    <div class="online">online</div>
+    <div class="subtitle"><?= htmlspecialchars($meta['subtitle'], ENT_QUOTES, 'UTF-8') ?></div>
+    <div class="online"><span class="online-dot" aria-hidden="true"></span>Online</div>
     <span class="btn">Entrar</span>
   </a>
 <?php endforeach; ?>

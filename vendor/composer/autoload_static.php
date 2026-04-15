@@ -9,19 +9,33 @@ class ComposerStaticInit9c4db4c69aab77a575a72c083461bf10
     public static $prefixLengthsPsr4 = array (
         'C' =>
         array (
+            'Club61\\Support\\' => 15,
             'Club61\\Services\\' => 16,
+            'Club61\\Repositories\\' => 20,
+            'Club61\\Infrastructure\\' => 22,
             'Club61\\Http\\Middleware\\' => 23,
             'Club61\\Http\\Controllers\\' => 24,
             'Club61\\Core\\' => 12,
             'Club61\\Controllers\\' => 19,
-            'Club61\\' => 7,
         ),
     );
 
     public static $prefixDirsPsr4 = array (
+        'Club61\\Support\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/app/Support',
+        ),
         'Club61\\Services\\' =>
         array (
             0 => __DIR__ . '/../..' . '/app/Services',
+        ),
+        'Club61\\Repositories\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/app/Repositories',
+        ),
+        'Club61\\Infrastructure\\' =>
+        array (
+            0 => __DIR__ . '/../..' . '/app/Infrastructure',
         ),
         'Club61\\Http\\Middleware\\' =>
         array (
@@ -38,10 +52,6 @@ class ComposerStaticInit9c4db4c69aab77a575a72c083461bf10
         'Club61\\Controllers\\' =>
         array (
             0 => __DIR__ . '/../..' . '/app/controllers',
-        ),
-        'Club61\\' =>
-        array (
-            0 => __DIR__ . '/../..' . '/app',
         ),
     );
 

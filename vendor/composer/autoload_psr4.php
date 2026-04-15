@@ -6,10 +6,12 @@ $vendorDir = dirname(__DIR__);
 $baseDir = dirname($vendorDir);
 
 return array(
+    'Club61\\Support\\' => array($baseDir . '/app/Support'),
     'Club61\\Services\\' => array($baseDir . '/app/Services'),
+    'Club61\\Repositories\\' => array($baseDir . '/app/Repositories'),
+    'Club61\\Infrastructure\\' => array($baseDir . '/app/Infrastructure'),
     'Club61\\Http\\Middleware\\' => array($baseDir . '/app/Http/Middleware'),
     'Club61\\Http\\Controllers\\' => array($baseDir . '/app/Http/Controllers'),
     'Club61\\Core\\' => array($baseDir . '/app/Core'),
     'Club61\\Controllers\\' => array($baseDir . '/app/controllers'),
-    'Club61\\' => array($baseDir . '/app'),
 );

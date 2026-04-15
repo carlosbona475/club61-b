@@ -57,6 +57,39 @@ $postAuthorById = [];
 $likedPostIds = [];
 $likesCountMap = [];
 $commentsByPost = [];
+$feedStoryUserIds = [];
+
+if ($access_token !== '' && supabase_service_role_available()) {
+    $nowIso = gmdate('Y-m-d\TH:i:s\Z');
+    $stUrl = SUPABASE_URL . '/rest/v1/stories?select=user_id'
+        . '&expires_at=gt.' . rawurlencode($nowIso)
+        . '&order=created_at.desc&limit=200';
+    $chSt = curl_init($stUrl);
+    curl_setopt_array($chSt, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $rawSt = curl_exec($chSt);
+    $cSt = (int) curl_getinfo($chSt, CURLINFO_HTTP_CODE);
+    curl_close($chSt);
+    if ($rawSt !== false && $cSt >= 200 && $cSt < 300) {
+        $srj = json_decode($rawSt, true);
+        if (is_array($srj)) {
+            foreach ($srj as $sr) {
+                $u = isset($sr['user_id']) ? (string) $sr['user_id'] : '';
+                if ($u !== '') {
+                    $feedStoryUserIds[$u] = true;
+                }
+            }
+        }
+    }
+}
 
 $ch = curl_init(SUPABASE_URL . '/rest/v1/posts?select=id,user_id,image_url,caption,created_at&order=created_at.desc&limit=' . $feedPerPage . '&offset=' . $feedOffset);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
@@ -159,14 +192,15 @@ $isLiked = isset($likedPostIds[$pid]);
 $likeTotal = (int) ($likesCountMap[(string) $pid] ?? 0);
 $rawComments = isset($commentsByPost[$pid]) && is_array($commentsByPost[$pid]) ? $commentsByPost[$pid] : [];
 $profileViewUrl = '/features/profile/view.php?id=' . rawurlencode($authorId);
+$authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
 ?>
 <article class="post-block" data-post-id="<?= (int) $pid ?>">
   <div class="post-head">
     <a class="post-head-link" href="<?= htmlspecialchars($profileViewUrl, ENT_QUOTES, 'UTF-8') ?>">
       <?php if ($pavatar !== ''): ?>
-      <span class="avatar-wrapper"><img class="post-av" src="<?= htmlspecialchars($pavatar, ENT_QUOTES, 'UTF-8') ?>" alt=""><?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
+      <span class="avatar-wrapper<?= $authorHasStory ? ' post-av-wrap' : '' ?>"><img class="post-av" src="<?= htmlspecialchars($pavatar, ENT_QUOTES, 'UTF-8') ?>" alt=""><?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
       <?php else: ?>
-      <span class="post-av-fallback avatar-wrapper" aria-hidden="true">&#128100;<?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
+      <span class="post-av-fallback avatar-wrapper<?= $authorHasStory ? ' post-av-wrap' : '' ?>" aria-hidden="true">&#128100;<?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
       <?php endif; ?>
       <div class="post-head-meta"><div class="post-head-name"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></div><div class="post-head-time"><?= htmlspecialchars($relTime, ENT_QUOTES, 'UTF-8') ?></div></div>
     </a>

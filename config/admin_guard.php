@@ -96,14 +96,14 @@ function isCurrentUserAdmin(): bool
         return false;
     }
 
-    $role = trim((string) ($row['role'] ?? ''));
+    $role = strtolower(trim((string) ($row['role'] ?? '')));
     $status = trim((string) ($row['status'] ?? ''));
 
     if ($status === 'banned') {
         return false;
     }
 
-    // Apenas administradores (legado: role vazio ou 'member' não é admin)
+    // Administradores (aceita legado 'Admin' / espaços; não confundir com 'member' / 'membro')
     return $role === 'admin';
 }
 

@@ -52,6 +52,8 @@ $status = (string) ($_GET['status'] ?? '');
 $message = (string) ($_GET['message'] ?? '');
 $posts = [];
 $storyProfiles = [];
+/** @var array<string, true> ids de utilizadores com story ativo (anel no feed) */
+$feedStoryUserIds = [];
 $membros_ativos = 0;
 $postAuthorById = [];
 $likedPostIds = [];
@@ -96,6 +98,9 @@ if ($access_token !== '' && supabase_service_role_available()) {
         if (is_array($storyRows)) {
             foreach ($storyRows as $sr) {
                 $uid = isset($sr['user_id']) ? (string) $sr['user_id'] : '';
+                if ($uid !== '') {
+                    $feedStoryUserIds[$uid] = true;
+                }
                 if ($uid !== '' && !isset($seen[$uid])) {
                     $seen[$uid] = true;
                     $orderedUserIds[] = $uid;

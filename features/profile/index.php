@@ -942,7 +942,7 @@ $igShowRel = trim($profileRelationship) !== '';
                             <h2 class="ig-username"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></h2>
                             <?php if ($is_own_profile): ?>
                             <div class="ig-title-actions">
-                                <?php if (is_array($profileRow) && (($profileRow['role'] ?? '') === 'admin')): ?>
+                                <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
                                 <a href="/features/admin/index.php" class="btn-admin-link">⚙️ Painel Admin</a>
                                 <?php endif; ?>
                                 <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>

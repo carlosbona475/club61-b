@@ -145,14 +145,41 @@ if ($raw !== false && $code >= 200 && $code < 300) {
     }
 }
 
-$userIds = [];
+$salaParticipantIds = [];
 foreach ($messages as $m) {
     $uid = isset($m['user_id']) ? (string) $m['user_id'] : '';
     if ($uid !== '') {
-        $userIds[$uid] = true;
+        $salaParticipantIds[$uid] = true;
     }
 }
-$idList = array_keys($userIds);
+$salaParticipantIds[$current_user_id] = true;
+
+$partUrl = SUPABASE_URL . '/rest/v1/general_messages?sala=eq.' . rawurlencode($sala)
+    . '&select=user_id&order=created_at.desc&limit=500';
+$chPart = curl_init($partUrl);
+curl_setopt_array($chPart, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => false,
+    CURLOPT_HTTPHEADER => chat_service_headers(false),
+    CURLOPT_HTTPGET => true,
+]);
+$rawPart = curl_exec($chPart);
+$codePart = curl_getinfo($chPart, CURLINFO_HTTP_CODE);
+curl_close($chPart);
+if ($rawPart !== false && $codePart >= 200 && $codePart < 300) {
+    $partRows = json_decode($rawPart, true);
+    if (is_array($partRows)) {
+        foreach ($partRows as $pr) {
+            $u = isset($pr['user_id']) ? (string) $pr['user_id'] : '';
+            if ($u !== '') {
+                $salaParticipantIds[$u] = true;
+            }
+        }
+    }
+}
+
+$idList = array_keys($salaParticipantIds);
 $profilesById = [];
 if ($idList !== []) {
     $inList = implode(',', $idList);
@@ -179,6 +206,25 @@ if ($idList !== []) {
         }
     }
 }
+
+$sidebarOnline = [];
+foreach ($idList as $pid) {
+    $row = $profilesById[$pid] ?? null;
+    if ($row === null) {
+        continue;
+    }
+    $ls = isset($row['last_seen']) ? (string) $row['last_seen'] : null;
+    if (isUserOnline($ls, 180)) {
+        $sidebarOnline[] = ['id' => $pid, 'row' => $row];
+    }
+}
+usort($sidebarOnline, static function (array $a, array $b): int {
+    $da = isset($a['row']['display_id']) ? trim((string) $a['row']['display_id']) : '';
+    $db = isset($b['row']['display_id']) ? trim((string) $b['row']['display_id']) : '';
+
+    return strcasecmp($da, $db);
+});
+$sidebarOnlineCount = count($sidebarOnline);
 
 function gm_date_key(?string $iso): string
 {
@@ -221,13 +267,60 @@ function date_divider_label(string $dayKey): string
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;height:100dvh}
-body{
+body.gm-body{
   background:#0A0A0A;color:#fff;font-family:'Segoe UI',system-ui,sans-serif;
   display:flex;flex-direction:column;align-items:stretch;
-  max-width:480px;margin:0 auto;width:100%;min-height:100dvh;
+  max-width:none;margin:0 auto;width:100%;min-height:100dvh;
   padding-bottom:calc(56px + env(safe-area-inset-bottom,0px));
 }
+.gm-shell{
+  flex:1;display:flex;flex-direction:column;min-height:0;width:100%;
+  max-width:720px;margin:0 auto;align-items:stretch;
+}
+.gm-main-col{flex:1;min-width:0;max-width:480px;display:flex;flex-direction:column;width:100%}
 .ch-main{flex:1;display:flex;flex-direction:column;min-height:0;width:100%}
+.gm-sidebar{
+  display:none;flex-direction:column;flex-shrink:0;width:200px;background:#111;
+  border-left:1px solid #222;padding:12px 10px 16px;gap:10px;overflow-y:auto;
+}
+.gm-sidebar-title{font-size:0.72rem;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px}
+.gm-side-item{width:100%}
+.gm-side-link{
+  display:flex;align-items:center;gap:8px;padding:6px 4px;border-radius:8px;text-decoration:none;color:#ddd;font-size:0.8rem;position:relative;
+}
+.gm-side-link:hover{background:rgba(123,46,255,0.08);color:#fff}
+.gm-side-av{width:32px;height:32px;border-radius:50%;object-fit:cover;background:#0d0d0d;flex-shrink:0;border:1px solid #222}
+.gm-side-ph{width:32px;height:32px;border-radius:50%;background:#0d0d0d;border:1px solid #222;display:flex;align-items:center;justify-content:center;font-size:0.85rem;color:#7B2EFF;flex-shrink:0}
+.gm-side-cl{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#C9A84C;font-weight:600}
+.gm-side-dot{
+  width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;
+  box-shadow:0 0 0 2px #111;
+}
+.gm-online-fab{
+  display:none;position:fixed;right:12px;z-index:280;
+  bottom:calc(56px + env(safe-area-inset-bottom,0px) + 10px);
+  padding:8px 12px;border-radius:999px;border:1px solid #333;background:#111;color:#C9A84C;
+  font-size:0.8rem;font-weight:600;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,0.45);
+}
+@media (min-width:721px){
+  .gm-shell{flex-direction:row;max-width:none;width:100%}
+  .gm-main-col{max-width:480px}
+  .gm-sidebar{display:flex}
+}
+@media (max-width:720px){
+  .gm-online-fab{display:block!important}
+  .gm-sidebar{
+    display:flex!important;flex-direction:column;
+    position:fixed;top:0;right:0;bottom:0;width:min(260px,88vw);z-index:400;
+    border-left:1px solid #222;border-top:none;padding-top:56px;
+    transform:translateX(100%);transition:transform .28s ease;box-shadow:-8px 0 24px rgba(0,0,0,0.5);
+  }
+  .gm-sidebar.is-open{transform:translateX(0)}
+  .gm-sidebar-backdrop{
+    display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:399;
+  }
+  .gm-sidebar-backdrop.is-on{display:block}
+}
 .ch-top{
   flex-shrink:0;width:100%;display:flex;align-items:center;justify-content:space-between;
   padding:10px 12px;background:#0A0A0A;border-bottom:1px solid #1a1a1a;gap:8px;
@@ -282,7 +375,7 @@ body{
 .bottomnav a.is-active{color:#7B2EFF}
 </style>
 </head>
-<body>
+<body class="gm-body">
 
 <header class="ch-top">
   <a href="/features/chat/salas.php" aria-label="Voltar às salas">←</a>
@@ -290,6 +383,8 @@ body{
   <a href="/features/chat/inbox.php" aria-label="Mensagens">✉️</a>
 </header>
 
+<div class="gm-shell">
+<div class="gm-main-col">
 <div class="ch-main">
 <div class="ch-msgs" id="msgScroll">
 <?php
@@ -307,7 +402,7 @@ foreach ($messages as $m):
 <?php
     endif;
     $author = ($mid !== '' && isset($profilesById[$mid])) ? $profilesById[$mid] : [];
-    $label = $author !== [] ? clLabel($author) : 'Membro';
+    $label = $author !== [] ? clLabel($author) : club61_display_id_label(null);
     $avatar = ($author !== [] && !empty($author['avatar_url'])) ? trim((string) $author['avatar_url']) : '';
     $lastSeen = ($author !== [] && isset($author['last_seen'])) ? (string) $author['last_seen'] : null;
     $isOnline = isUserOnline($lastSeen);
@@ -414,6 +509,41 @@ foreach ($messages as $m):
 </form>
 </div>
 </div>
+</div>
+
+<aside class="gm-sidebar" id="gmSidebar" aria-label="Online nesta sala">
+  <div class="gm-sidebar-title">Nesta sala</div>
+  <?php if ($sidebarOnlineCount === 0): ?>
+  <p style="font-size:0.78rem;color:#555;line-height:1.4;margin:4px 0 0">Ninguém com atividade recente (últimos 3 min).</p>
+  <?php else: ?>
+    <?php foreach ($sidebarOnline as $ent):
+        $spid = (string) $ent['id'];
+        $sr = $ent['row'];
+        $slab = clLabel($sr);
+        $sav = isset($sr['avatar_url']) ? trim((string) $sr['avatar_url']) : '';
+        $sls = isset($sr['last_seen']) ? (string) $sr['last_seen'] : null;
+        $sOn = isUserOnline($sls, 180);
+        $sProf = '/features/profile/view.php?id=' . rawurlencode($spid);
+        ?>
+  <div class="gm-side-item">
+    <a class="gm-side-link" href="<?= htmlspecialchars($sProf, ENT_QUOTES, 'UTF-8') ?>">
+      <?php if ($sav !== ''): ?>
+      <img class="gm-side-av" src="<?= htmlspecialchars($sav, ENT_QUOTES, 'UTF-8') ?>" alt="">
+      <?php else: ?>
+      <span class="gm-side-ph" aria-hidden="true">&#128100;</span>
+      <?php endif; ?>
+      <span class="gm-side-cl"><?= htmlspecialchars($slab, ENT_QUOTES, 'UTF-8') ?></span>
+      <?php if ($sOn): ?><span class="gm-side-dot" title="Online"></span><?php endif; ?>
+    </a>
+  </div>
+    <?php endforeach; ?>
+  <?php endif; ?>
+</aside>
+</div>
+<div class="gm-sidebar-backdrop" id="gmSidebarBackdrop" aria-hidden="true"></div>
+<button type="button" class="gm-online-fab" id="gmOnlineFab" aria-controls="gmSidebar">
+  👥 <?= (int) $sidebarOnlineCount ?> online
+</button>
 
 <nav class="bottomnav" aria-label="Navegação">
   <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
@@ -491,6 +621,25 @@ function clearGmFile() {
   window.addEventListener('beforeunload', function () {
     try { _sb.removeChannel(channel); } catch (e) {}
   });
+})();
+
+(function () {
+  var side = document.getElementById('gmSidebar');
+  var fab = document.getElementById('gmOnlineFab');
+  var back = document.getElementById('gmSidebarBackdrop');
+  if (!side || !fab) return;
+  function close() {
+    side.classList.remove('is-open');
+    if (back) back.classList.remove('is-on');
+  }
+  function open() {
+    side.classList.add('is-open');
+    if (back) back.classList.add('is-on');
+  }
+  fab.addEventListener('click', function () {
+    if (side.classList.contains('is-open')) close(); else open();
+  });
+  if (back) back.addEventListener('click', close);
 })();
 </script>
 </body>

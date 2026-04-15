@@ -13,7 +13,7 @@ if (is_file(__DIR__ . '/config/profile_helper.php')) {
     <li><a href="/features/feed/index.php" style="color:#888;text-decoration:none;font-size:0.9rem;font-weight:500">Feed</a></li>
     <li><a href="/features/profile/index.php" style="color:#888;text-decoration:none;font-size:0.9rem;font-weight:500">Perfil</a></li>
     <?php if ($show_admin_nav): ?>
-    <li><a class="dark-btn" href="/features/admin/index.php" style="display:inline-block;padding:8px 14px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#C9A84C;text-decoration:none;font-size:0.85rem;font-weight:600">⚙ Admin</a></li>
+    <li><a class="dark-btn" href="/admin" style="display:inline-block;padding:8px 14px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#C9A84C;text-decoration:none;font-size:0.85rem;font-weight:600">⚙ Admin</a></li>
     <?php endif; ?>
     <li><a href="/features/auth/logout.php" style="color:#888;text-decoration:none;font-size:0.9rem;font-weight:500">Sair</a></li>
   </ul>

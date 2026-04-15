@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 /**
- * Considera online quem atualizou presença nos últimos 60 segundos.
+ * Considera online quem atualizou presença dentro da janela (padrão: 60s — feed; salas podem usar 180s).
  */
-function isUserOnline(?string $lastSeen): bool
+function isUserOnline(?string $lastSeen, int $maxAgeSeconds = 60): bool
 {
     if ($lastSeen === null || trim($lastSeen) === '') {
         return false;
@@ -17,5 +17,5 @@ function isUserOnline(?string $lastSeen): bool
         return false;
     }
 
-    return (time() - $ts) < 60;
+    return (time() - $ts) < $maxAgeSeconds;
 }

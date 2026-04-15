@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';
@@ -37,7 +36,7 @@ $useHeaders = $sk !== null
 $nowIso = gmdate('Y-m-d\TH:i:s\Z');
 $storyUrl = SUPABASE_URL . '/rest/v1/stories?user_id=eq.' . urlencode($userId)
     . '&expires_at=gt.' . urlencode($nowIso)
-    . '&order=created_at.desc&limit=1'
+    . '&order=created_at.asc'
     . '&select=id,image_url,expires_at,created_at';
 
 $ch = curl_init($storyUrl);
@@ -50,18 +49,27 @@ $storyBody = curl_exec($ch);
 $storyCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-$storyRow = null;
+$storyRows = [];
 if ($storyBody !== false && $storyCode >= 200 && $storyCode < 300) {
     $rows = json_decode($storyBody, true);
-    if (is_array($rows) && !empty($rows[0])) {
-        $storyRow = $rows[0];
+    if (is_array($rows)) {
+        $storyRows = $rows;
     }
 }
 
-$imageUrl = '';
-if (is_array($storyRow) && !empty($storyRow['image_url'])) {
-    $imageUrl = trim((string) $storyRow['image_url']);
+$slides = [];
+foreach ($storyRows as $row) {
+    if (!empty($row['image_url'])) {
+        $slides[] = [
+            'id' => isset($row['id']) ? (int) $row['id'] : 0,
+            'image_url' => trim((string) $row['image_url']),
+            'expires_at' => isset($row['expires_at']) ? (string) $row['expires_at'] : '',
+            'created_at' => isset($row['created_at']) ? (string) $row['created_at'] : '',
+        ];
+    }
 }
+$nSlides = count($slides);
+$slidesJson = json_encode($slides, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT);
 
 $profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=avatar_url,display_id';
 $ch = curl_init($profUrl);
@@ -91,13 +99,13 @@ if (is_array($profRows) && !empty($profRows[0])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Story — Club61</title>
+    <title>Stories — Club61</title>
     <style>
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body {
             height: 100%;
             overflow: hidden;
-            background: #000;
+            background: #0A0A0A;
             color: #fff;
             font-family: 'Segoe UI', system-ui, sans-serif;
         }
@@ -108,27 +116,33 @@ if (is_array($profRows) && !empty($profRows[0])) {
             flex-direction: column;
             background: #000;
         }
-        .progress-wrap {
+        .progress-row {
             flex-shrink: 0;
-            padding: 10px 12px 0;
+            display: flex;
+            gap: 4px;
+            padding: 10px 10px 0;
             z-index: 20;
         }
-        .progress-track {
+        .progress-seg {
+            flex: 1;
             height: 3px;
-            background: rgba(255,255,255,0.2);
+            background: rgba(255,255,255,0.22);
             border-radius: 2px;
             overflow: hidden;
-            direction: ltr;
         }
-        .progress-fill {
+        .progress-seg-fill {
             height: 100%;
-            width: 100%;
-            background: #fff;
-            animation: story-progress-drain 5s linear forwards;
+            width: 0%;
+            background: linear-gradient(90deg, #7B2EFF, #C9A84C);
+            border-radius: 2px;
         }
-        @keyframes story-progress-drain {
-            from { width: 100%; }
-            to { width: 0%; }
+        .progress-seg.is-done .progress-seg-fill { width: 100% !important; transition: none; }
+        .progress-seg.is-active .progress-seg-fill {
+            animation: seg-fill var(--seg-dur, 5s) linear forwards;
+        }
+        @keyframes seg-fill {
+            from { width: 0%; }
+            to { width: 100%; }
         }
         .story-top {
             display: flex;
@@ -148,7 +162,7 @@ if (is_array($profRows) && !empty($profRows[0])) {
             height: 36px;
             border-radius: 50%;
             object-fit: cover;
-            border: 2px solid rgba(255,255,255,0.25);
+            border: 2px solid #7B2EFF;
             flex-shrink: 0;
             background: #1a1a1a;
         }
@@ -163,7 +177,7 @@ if (is_array($profRows) && !empty($profRows[0])) {
             font-size: 0.85rem;
             font-weight: 600;
             letter-spacing: 0.04em;
-            color: #fff;
+            color: #C9A84C;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
@@ -210,12 +224,8 @@ if (is_array($profRows) && !empty($profRows[0])) {
     </style>
 </head>
 <body>
-    <div class="story-root">
-        <div class="progress-wrap">
-            <div class="progress-track">
-                <div class="progress-fill"></div>
-            </div>
-        </div>
+    <div class="story-root" id="storyRoot">
+        <div class="progress-row" id="progressRow" aria-hidden="true"></div>
         <div class="story-top">
             <div class="story-user">
                 <?php if ($avatarUrl !== ''): ?>
@@ -227,12 +237,12 @@ if (is_array($profRows) && !empty($profRows[0])) {
             </div>
             <button type="button" class="story-close" id="storyClose" aria-label="Fechar">×</button>
         </div>
-        <?php if ($imageUrl !== ''): ?>
+        <?php if ($nSlides > 0): ?>
         <div class="story-img-wrap">
-            <img src="<?= htmlspecialchars($imageUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Story">
+            <img id="storyImg" src="" alt="Story">
         </div>
         <?php else: ?>
-        <div class="story-empty">Story não encontrado ou expirado.</div>
+        <div class="story-empty">Nenhum story ativo ou expirado.</div>
         <?php endif; ?>
     </div>
     <script>
@@ -240,7 +250,58 @@ if (is_array($profRows) && !empty($profRows[0])) {
         var feed = '/features/feed/index.php';
         function goFeed() { window.location.href = feed; }
         document.getElementById('storyClose').addEventListener('click', goFeed);
-        setTimeout(goFeed, 5000);
+
+        var slides = <?= $slidesJson ?>;
+        if (!slides.length) return;
+
+        var imgEl = document.getElementById('storyImg');
+        var row = document.getElementById('progressRow');
+        var idx = 0;
+        var SEG_MS = 5000;
+
+        function buildBars() {
+            row.innerHTML = '';
+            slides.forEach(function (_, i) {
+                var seg = document.createElement('div');
+                seg.className = 'progress-seg';
+                seg.dataset.i = String(i);
+                var fill = document.createElement('div');
+                fill.className = 'progress-seg-fill';
+                seg.appendChild(fill);
+                row.appendChild(seg);
+            });
+        }
+
+        function setActive(i) {
+            var segs = row.querySelectorAll('.progress-seg');
+            segs.forEach(function (el, j) {
+                el.classList.remove('is-active', 'is-done');
+                var f = el.querySelector('.progress-seg-fill');
+                if (f) f.style.animation = 'none';
+                if (j < i) el.classList.add('is-done');
+            });
+            if (i >= segs.length) {
+                goFeed();
+                return;
+            }
+            var cur = segs[i];
+            cur.classList.add('is-active');
+            var fill = cur.querySelector('.progress-seg-fill');
+            void cur.offsetWidth;
+            fill.style.animation = '';
+            fill.style.animation = 'seg-fill ' + (SEG_MS / 1000) + 's linear forwards';
+
+            if (imgEl && slides[i]) imgEl.src = slides[i].image_url;
+
+            clearTimeout(setActive._t);
+            setActive._t = setTimeout(function () {
+                idx = i + 1;
+                setActive(idx);
+            }, SEG_MS);
+        }
+
+        buildBars();
+        setActive(0);
     })();
     </script>
 </body>

@@ -2,45 +2,6 @@
 
 declare(strict_types=1);
 
-// TEMPORARY PRODUCTION DEBUG — PHP requires declare(strict_types=1) first; remove this whole block after verification.
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
-echo "<pre style='background:black;color:lime;padding:20px'>";
-echo "DEBUG: CREATE_POST.PHP IS EXECUTING\n\n";
-
-echo "FILE PATH:\n";
-echo __FILE__ . "\n\n";
-
-echo "SESSION DATA:\n";
-print_r($_SESSION);
-
-$token = $_SESSION['access_token'] ?? null;
-
-echo "\nTOKEN VALUE:\n";
-var_dump($token);
-
-if (!$token) {
-    echo "\nERROR: TOKEN NOT FOUND\n";
-    exit;
-}
-
-if (substr_count($token, '.') !== 2) {
-    echo "\nERROR: INVALID JWT FORMAT\n";
-    exit;
-}
-
-echo "\nJWT FORMAT OK\n";
-echo "</pre>";
-exit;
-
-require_once dirname(__DIR__, 2) . '/config/session.php';
-club61_session_bootstrap();
-if (session_status() !== PHP_SESSION_ACTIVE) {
-    session_start();
-}
-
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
@@ -51,14 +12,13 @@ require_once CLUB61_ROOT . '/config/upload_validate.php';
 require_once CLUB61_ROOT . '/config/post_input.php';
 
 $token = $_SESSION['access_token'] ?? null;
-if (!$token) {
-    die('Error: access_token not found in session');
-}
-if (!is_string($token) || $token === '') {
-    die('Error: access_token not found in session');
+if (!$token || !is_string($token) || $token === '') {
+    header('Location: /features/auth/login.php');
+    exit;
 }
 if (substr_count($token, '.') !== 2) {
-    die('Error: invalid JWT format');
+    header('Location: /features/feed/index.php?status=error&message=' . urlencode('Sessão inválida. Faça login novamente.'));
+    exit;
 }
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -84,7 +44,12 @@ if (!$check['ok']) {
 
 $mimeType = $check['mime'];
 $filename = uniqid('post_', true) . '.' . $check['ext'];
-$userId = $_SESSION['user_id'];
+$userId = (string) ($_SESSION['user_id'] ?? '');
+if ($userId === '') {
+    header('Location: /features/auth/login.php');
+    exit;
+}
+
 $binary = file_get_contents($file['tmp_name']);
 
 if ($binary === false) {
@@ -92,53 +57,63 @@ if ($binary === false) {
     exit;
 }
 
-$storageUrl = SUPABASE_URL . '/storage/v1/object/posts/' . $filename;
+if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+    header('Location: /features/feed/index.php?status=error&message=' . urlencode('Configure SUPABASE_SERVICE_KEY no servidor.'));
+    exit;
+}
+
+// Storage: mesmo padrão do upload de avatar (service_role no Authorization)
+$storageUrl = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/posts/' . str_replace(['/', '\\'], '', $filename);
 $storageCh = curl_init($storageUrl);
 curl_setopt_array($storageCh, [
     CURLOPT_RETURNTRANSFER => true,
-    CURLOPT_POST           => true,
-    CURLOPT_POSTFIELDS     => $binary,
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => $binary,
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => false,
-    CURLOPT_HTTPHEADER     => [
-        'Authorization: Bearer ' . $token,
+    CURLOPT_HTTPHEADER => [
         'apikey: ' . SUPABASE_ANON_KEY,
+        'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
         'Content-Type: ' . $mimeType,
         'x-upsert: true',
     ],
 ]);
 
 $storageResponse = curl_exec($storageCh);
-$storageStatusCode = curl_getinfo($storageCh, CURLINFO_HTTP_CODE);
+$storageStatusCode = (int) curl_getinfo($storageCh, CURLINFO_HTTP_CODE);
 $storageError = curl_error($storageCh);
 curl_close($storageCh);
 
 if ($storageResponse === false || $storageStatusCode < 200 || $storageStatusCode >= 300) {
+    $detail = '';
+    if (is_string($storageResponse) && $storageResponse !== '') {
+        $detail = substr($storageResponse, 0, 120);
+    }
     $errorMessage = 'Erro ao enviar imagem para o Storage.';
     if ($storageError !== '') {
-        $errorMessage = 'Falha de comunicacao com o Storage.';
+        $errorMessage = 'Falha de comunicação com o Storage.';
+    } elseif ($detail !== '') {
+        $errorMessage = 'Storage (HTTP ' . $storageStatusCode . '): ' . $detail;
     }
 
     header('Location: /features/feed/index.php?status=error&message=' . urlencode($errorMessage));
     exit;
 }
 
-// user_id como string (UUID no Supabase Auth)
 $payload = [
-    'user_id' => (string) $userId,
-    'image_url' => SUPABASE_URL . '/storage/v1/object/public/posts/' . $filename,
+    'user_id' => $userId,
+    'image_url' => rtrim(SUPABASE_URL, '/') . '/storage/v1/object/public/posts/' . $filename,
     'caption' => $caption === '' ? null : $caption,
 ];
 
-// Mesmo padrão do Storage: service_role no servidor evita bloqueio por RLS no INSERT.
 $ch = curl_init(SUPABASE_URL . '/rest/v1/posts');
 if (supabase_service_role_available()) {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
+        CURLOPT_POST => true,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_HTTPHEADER     => array_merge(supabase_service_rest_headers(true), [
+        CURLOPT_HTTPHEADER => array_merge(supabase_service_rest_headers(true), [
             'Prefer: return=representation',
         ]),
         CURLOPT_POSTFIELDS => json_encode($payload),
@@ -146,10 +121,10 @@ if (supabase_service_role_available()) {
 } else {
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_POST           => true,
+        CURLOPT_POST => true,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
-        CURLOPT_HTTPHEADER     => [
+        CURLOPT_HTTPHEADER => [
             'Content-Type: application/json',
             'apikey: ' . SUPABASE_ANON_KEY,
             'Authorization: Bearer ' . $token,
@@ -160,14 +135,14 @@ if (supabase_service_role_available()) {
 }
 
 $rawResponse = curl_exec($ch);
-$statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$statusCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 $curlError = curl_error($ch);
 curl_close($ch);
 
 if ($rawResponse === false || $statusCode < 200 || $statusCode >= 300) {
     $errorMessage = 'Erro ao criar post. HTTP=' . $statusCode . ' | ' . substr((string) $rawResponse, 0, 400);
     if ($curlError !== '') {
-        $errorMessage = 'Erro de comunicacao com Supabase.';
+        $errorMessage = 'Erro de comunicação com Supabase.';
     }
 
     header('Location: /features/feed/index.php?status=error&message=' . urlencode($errorMessage));

@@ -94,7 +94,7 @@ a{color:inherit}
 .story-avatar-ring{
   box-sizing:border-box;width:64px;height:64px;border-radius:50%;
   border:3px solid transparent;
-  background:linear-gradient(#0A0A0A,#0A0A0A) padding-box,linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888) border-box;
+  background:linear-gradient(#0A0A0A,#0A0A0A) padding-box,linear-gradient(135deg,#7B2EFF,#9B4DFF,#C9A84C) border-box;
   background-clip:padding-box,border-box;overflow:hidden;display:flex;align-items:center;justify-content:center;
 }
 .story-avatar-img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block}
@@ -110,6 +110,9 @@ a{color:inherit}
   display:flex;align-items:center;gap:10px;padding:12px 14px 8px;
 }
 .post-head a.post-head-link{display:flex;align-items:center;gap:10px;text-decoration:none;flex:1;min-width:0}
+.post-av-wrap{display:inline-flex;padding:2px;border-radius:50%;flex-shrink:0;
+  background:linear-gradient(135deg,#7B2EFF,#9B4DFF);box-sizing:border-box;align-items:center;justify-content:center}
+.post-av-wrap .post-av,.post-av-wrap .post-av-fallback{border:none;width:32px;height:32px}
 .post-av{width:34px;height:34px;border-radius:50%;object-fit:cover;background:#111;flex-shrink:0;border:1px solid #222}
 .post-av-fallback{width:34px;height:34px;border-radius:50%;background:#111;border:1px solid #222;display:flex;align-items:center;justify-content:center;font-size:0.95rem;color:#7B2EFF}
 .post-head-meta{min-width:0}
@@ -221,6 +224,11 @@ a{color:inherit}
 </div>
 <?php endif; ?>
 
+<?php
+if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
+    $feedStoryUserIds = [];
+}
+?>
 <?php if ($access_token !== ''): ?>
 <div class="stories-wrap">
   <div class="stories-scroll" role="list" aria-label="Stories">
@@ -284,17 +292,18 @@ a{color:inherit}
           return strcmp($ta, $tb);
       });
       $profileViewUrl = '/features/profile/view.php?id=' . rawurlencode($authorId);
+      $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
       ?>
     <article class="post-block" data-post-id="<?= (int) $pid ?>">
       <div class="post-head">
         <a class="post-head-link" href="<?= htmlspecialchars($profileViewUrl, ENT_QUOTES, 'UTF-8') ?>">
           <?php if ($pavatar !== ''): ?>
-            <span class="avatar-wrapper">
+            <span class="avatar-wrapper<?= $authorHasStory ? ' post-av-wrap' : '' ?>">
               <img class="post-av" src="<?= htmlspecialchars($pavatar, ENT_QUOTES, 'UTF-8') ?>" alt="">
               <?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?>
             </span>
           <?php else: ?>
-            <span class="post-av-fallback avatar-wrapper" aria-hidden="true">&#128100;<?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
+            <span class="post-av-fallback avatar-wrapper<?= $authorHasStory ? ' post-av-wrap' : '' ?>" aria-hidden="true">&#128100;<?php if ($pOnline): ?><span class="online-dot" aria-hidden="true"></span><?php endif; ?></span>
           <?php endif; ?>
           <div class="post-head-meta">
             <div class="post-head-name"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></div>
@@ -362,7 +371,7 @@ a{color:inherit}
   <button type="button" class="nav-fab-wrap" id="openPostModal" aria-label="Nova publicação"><span class="nav-fab" aria-hidden="true">＋</span><span style="font-size:0.6rem;opacity:0">.</span></button>
   <a href="/features/profile/index.php"><span>👤</span>Perfil</a>
   <?php if ($is_admin): ?>
-  <a class="bnav-btn" href="/features/admin/index.php">
+  <a class="bnav-btn" href="/admin">
     <span>⚙️</span>
     <span>Admin</span>
   </a>

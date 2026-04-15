@@ -213,7 +213,7 @@ if ($rawPr !== false) {
         $otherProfile = $rows[0];
     }
 }
-$otherName = $otherProfile !== null ? dmClLabel($otherProfile) : 'Membro';
+$otherName = $otherProfile !== null ? dmClLabel($otherProfile) : club61_display_id_label(null);
 $otherAvatar = ($otherProfile !== null && !empty($otherProfile['avatar_url'])) ? trim((string) $otherProfile['avatar_url']) : '';
 $otherLastSeen = $otherProfile !== null && isset($otherProfile['last_seen']) ? (string) $otherProfile['last_seen'] : null;
 $otherOnline = isUserOnline($otherLastSeen);

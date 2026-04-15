@@ -123,13 +123,23 @@ curl_setopt_array($ch, [
         'x-upsert: true',
     ],
 ]);
-curl_exec($ch);
-$storageCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+$resBody = curl_exec($ch);
+$storageCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
 if ($storageCode < 200 || $storageCode >= 300) {
+    $hint = '';
+    if (is_string($resBody) && $resBody !== '') {
+        $hint = substr(preg_replace('/\s+/', ' ', $resBody), 0, 160);
+    }
+    $msg = 'Erro ao salvar imagem (HTTP ' . $storageCode . ').';
+    if ($hint !== '') {
+        $msg .= ' ' . $hint;
+    } elseif ($storageCode === 400 || $storageCode === 404) {
+        $msg .= ' Confirme o bucket avatars no Supabase Storage e as políticas de upload.';
+    }
     $q = str_contains($okTarget, '?') ? '&' : '?';
-    header('Location: ' . $okTarget . $q . 'status=error&message=' . urlencode('Erro ao salvar imagem no armazenamento.'));
+    header('Location: ' . $okTarget . $q . 'status=error&message=' . urlencode($msg));
     exit;
 }
 

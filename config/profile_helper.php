@@ -251,7 +251,7 @@ function ensureUserProfile($user_id, $email)
 
     // STEP 2 — role; display_id é atribuído pelo trigger SQL (CL01, CL02…) ou por assignDisplayIdIfEmptyForUser
     $rowCount = countProfilesTotal($token);
-    $role = $rowCount === 0 ? 'admin' : 'membro';
+    $role = $rowCount === 0 ? 'admin' : 'member';
 
     // STEP 3 — inserir perfil (sem username visível; display_id pode ser preenchido no DB)
     $payload = [

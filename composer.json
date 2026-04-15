@@ -1,0 +1,18 @@
+{
+    "name": "club61/app",
+    "description": "Club61 App",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Club61\\": "app/",
+            "Club61\\Controllers\\": "app/controllers/",
+            "Club61\\Http\\Controllers\\": "app/Http/Controllers/",
+            "Club61\\Http\\Middleware\\": "app/Http/Middleware/",
+            "Club61\\Services\\": "app/Services/",
+            "Club61\\Core\\": "app/Core/"
+        }
+    },
+    "require": {
+        "php": ">=8.0"
+    }
+}

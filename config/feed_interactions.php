@@ -643,3 +643,90 @@ function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
 
     return is_array($rows) ? $rows : [];
 }
+
+/**
+ * Exclui um post: apenas se user_id corresponder. Remove arquivo do bucket `posts` quando possível.
+ *
+ * @return array{success:bool, message?:string}
+ */
+function feed_delete_owned_post(string $userId, int $postId): array
+{
+    if ($userId === '' || $postId <= 0) {
+        return ['success' => false, 'message' => 'Pedido inválido.'];
+    }
+    if (!feed_sk_available() || !defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY')) {
+        return ['success' => false, 'message' => 'Serviço indisponível.'];
+    }
+
+    $getUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id,user_id,image_url';
+    $ch = curl_init($getUrl);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return ['success' => false, 'message' => 'Não foi possível localizar o post.'];
+    }
+    $rows = json_decode((string) $raw, true);
+    if (!is_array($rows) || $rows === []) {
+        return ['success' => false, 'message' => 'Post não encontrado.'];
+    }
+    $row = $rows[0];
+    $owner = isset($row['user_id']) ? (string) $row['user_id'] : '';
+    if ($owner === '' || $owner !== $userId) {
+        return ['success' => false, 'message' => 'Sem permissão para excluir este post.'];
+    }
+
+    $imageUrl = isset($row['image_url']) ? trim((string) $row['image_url']) : '';
+    if ($imageUrl !== '' && preg_match('#/public/posts/([^?]+)#', $imageUrl, $m)) {
+        $fname = rawurldecode($m[1]);
+        $fname = str_replace(['/', '\\', "\0"], '', $fname);
+        if ($fname !== '') {
+            $delObj = rtrim(SUPABASE_URL, '/') . '/storage/v1/object/posts/' . rawurlencode($fname);
+            $chS = curl_init($delObj);
+            curl_setopt_array($chS, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_CUSTOMREQUEST => 'DELETE',
+                CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => false,
+                CURLOPT_HTTPHEADER => [
+                    'apikey: ' . SUPABASE_SERVICE_KEY,
+                    'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+                ],
+            ]);
+            curl_exec($chS);
+            curl_close($chS);
+        }
+    }
+
+    $delUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId;
+    $chD = curl_init($delUrl);
+    curl_setopt_array($chD, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Prefer: return=minimal',
+        ],
+    ]);
+    curl_exec($chD);
+    $codeD = curl_getinfo($chD, CURLINFO_HTTP_CODE);
+    curl_close($chD);
+    if ($codeD < 200 || $codeD >= 300) {
+        return ['success' => false, 'message' => 'Falha ao excluir o post no banco.'];
+    }
+
+    return ['success' => true];
+}

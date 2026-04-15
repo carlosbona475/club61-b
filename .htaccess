@@ -32,4 +32,6 @@ DirectoryIndex index.php index.html
     RewriteRule ^chat/online/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/presence/?$ /features/chat/chat_actions.php [L,QSA]
 
+    RewriteRule ^post/delete/?$ /features/feed/delete_post.php [L,QSA]
+
 </IfModule>

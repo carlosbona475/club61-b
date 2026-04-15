@@ -589,6 +589,47 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
   if (form) form.addEventListener('submit', function(){
     if (btnPub) { btnPub.disabled = true; btnPub.textContent = 'Publicando...'; }
   });
+
+  var DELETE_POST_URL = <?= json_encode('/features/feed/delete_post.php', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  document.addEventListener('click', function (ev) {
+    var btn = ev.target && ev.target.closest ? ev.target.closest('.btn-delete-post') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    var postId = btn.getAttribute('data-post-id');
+    if (!postId) return;
+    if (!confirm('Tem certeza que deseja excluir este post?')) return;
+    btn.disabled = true;
+    fetch(DELETE_POST_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ post_id: postId, csrf: FEED_CSRF })
+    })
+      .then(parseJsonSafe)
+      .then(function (data) {
+        if (!data) {
+          feedToast('Resposta inválida ao excluir.', 'error');
+          return;
+        }
+        if (data.csrf) FEED_CSRF = data.csrf;
+        if (data.success) {
+          var card = btn.closest('.post-block');
+          if (card) card.remove();
+          else feedToast('Post excluído.', 'ok');
+        } else {
+          if (data.message && data.message.indexOf('Sessão expirada') !== -1) {
+            feedToast('Sessão expirada. Atualizando página...', 'error');
+            setTimeout(function () { window.location.reload(); }, 600);
+            return;
+          }
+          alert('Erro ao excluir: ' + (data.message || 'tente novamente.'));
+        }
+      })
+      .catch(function () {
+        feedToast('Erro de rede ao excluir.', 'error');
+      })
+      .finally(function () { btn.disabled = false; });
+  });
 })();
 </script>
 </body>

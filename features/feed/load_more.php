@@ -204,6 +204,9 @@ $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
       <?php endif; ?>
       <div class="post-head-meta"><div class="post-head-name"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></div><div class="post-head-time"><?= htmlspecialchars($relTime, ENT_QUOTES, 'UTF-8') ?></div></div>
     </a>
+    <?php if ($authorId !== '' && isset($current_user_id) && $authorId === (string) $current_user_id): ?>
+    <button type="button" class="btn-delete-post" data-post-id="<?= (int) $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
+    <?php endif; ?>
   </div>
   <?php if (!empty($post['image_url'])): ?><div class="post-img-wrap"><img class="post-img" src="<?= htmlspecialchars((string) $post['image_url'], ENT_QUOTES, 'UTF-8') ?>" alt=""></div><?php endif; ?>
   <div class="post-actions-row"><button type="button" class="like-btn<?= $isLiked ? ' is-liked' : '' ?>" data-like-btn data-post-id="<?= (int) $pid ?>" aria-pressed="<?= $isLiked ? 'true' : 'false' ?>" aria-label="<?= $isLiked ? 'Descurtir' : 'Curtir' ?>"><?= $isLiked ? '♥' : '♡' ?></button><span class="like-count" data-like-count><?= (int) $likeTotal ?></span></div>

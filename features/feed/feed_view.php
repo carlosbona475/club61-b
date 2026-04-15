@@ -118,6 +118,11 @@ a{color:inherit}
 .post-head-meta{min-width:0}
 .post-head-name{font-size:0.9rem;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .post-head-time{font-size:0.72rem;color:#555;margin-top:2px}
+.btn-delete-post{
+  background:transparent;border:none;color:#ff4444;cursor:pointer;font-size:14px;
+  opacity:0.6;transition:opacity 0.2s;flex-shrink:0;padding:4px;line-height:1;
+}
+.btn-delete-post:hover{opacity:1}
 .post-img-wrap{width:100%;background:#111}
 .post-img{width:100%;display:block;max-height:520px;object-fit:cover;vertical-align:middle}
 .post-actions-row{padding:8px 14px 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -310,6 +315,9 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
             <div class="post-head-time"><?= htmlspecialchars($relTime, ENT_QUOTES, 'UTF-8') ?></div>
           </div>
         </a>
+        <?php if ($authorId !== '' && isset($current_user_id) && $authorId === (string) $current_user_id): ?>
+        <button type="button" class="btn-delete-post" data-post-id="<?= (int) $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
+        <?php endif; ?>
       </div>
       <?php if (!empty($post['image_url'])): ?>
       <div class="post-img-wrap">

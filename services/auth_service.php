@@ -263,11 +263,14 @@ function loginUser(string $email, string $password): array
     ];
 }
 
-function registerUser(string $email, string $password): array
+function registerUser(string $email, string $password, string $invite_code = ''): array
 {
     $r = supabaseAuthRequest('/auth/v1/signup', [
         'email' => $email,
         'password' => $password,
+        'data' => [
+            'invite_code' => $invite_code,
+        ],
     ]);
     if (!empty($r['success']) && !empty($r['data']) && is_array($r['data'])) {
         $data = $r['data'];

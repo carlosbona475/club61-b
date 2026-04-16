@@ -43,7 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-    $invite_code = $v['data']['invite_code'];
+    $invite_code = $_POST['invite_code'] ?? '';
+    $invite_code = is_string($invite_code) ? $invite_code : '';
     $email = $v['data']['email'];
     $password = $_POST['password'] ?? '';
     $password = is_string($password) ? $password : '';
@@ -99,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-    $result = registerUser($email, $password);
+    $result = registerUser($email, $password, $invite_code);
 
     if ($result['success']) {
         $newUserId = isset($result['user_id']) ? trim((string) $result['user_id']) : '';

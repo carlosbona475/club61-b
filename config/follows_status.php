@@ -270,3 +270,36 @@ function club61_follows_recusar(string $profileOwnerId, string $followerId): arr
 
     return ['ok' => true];
 }
+
+/**
+ * Remove a linha em follows (deixar de seguir ou cancelar pedido pendente).
+ *
+ * @return array{ok:bool, error?:string, followers_count?:int}
+ */
+function club61_follows_remover(string $followerId, string $followingId): array
+{
+    if ($followerId === '' || $followingId === '' || $followerId === $followingId || !club61_follows_service_ok()) {
+        return ['ok' => false, 'error' => 'invalid'];
+    }
+    $url = SUPABASE_URL . '/rest/v1/follows?follower_id=eq.' . urlencode($followerId)
+        . '&following_id=eq.' . urlencode($followingId);
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CUSTOMREQUEST => 'DELETE',
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => array_merge(club61_follows_headers(false), ['Prefer: return=minimal']),
+    ]);
+    curl_exec($ch);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($code < 200 || $code >= 300) {
+        return ['ok' => false, 'error' => 'delete_failed'];
+    }
+
+    return [
+        'ok' => true,
+        'followers_count' => club61_follows_count_followers_accepted($followingId),
+    ];
+}

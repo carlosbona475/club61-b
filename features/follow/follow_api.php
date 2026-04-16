@@ -51,7 +51,7 @@ if ($uid === '') {
 
 $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH) ?: '';
 $action = '';
-if (preg_match('#/follow/(enviar|aceitar|recusar)/?$#', $path, $m)) {
+if (preg_match('#/follow/(enviar|aceitar|recusar|remover)/?$#', $path, $m)) {
     $action = $m[1];
 }
 if ($action === '') {
@@ -145,6 +145,36 @@ if ($action === 'recusar') {
     echo json_encode([
         'success' => true,
         'pending_count' => club61_follows_pending_incoming_count($uid),
+    ]);
+
+    exit;
+}
+
+if ($action === 'remover') {
+    $followingId = trim((string) ($input['following_id'] ?? $_POST['following_id'] ?? ''));
+    if ($followingId === '' || !preg_match('/^[0-9a-f-]{36}$/i', $followingId)) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'following_id inválido']);
+
+        exit;
+    }
+    if ($followingId === $uid) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => 'Operação inválida']);
+
+        exit;
+    }
+    $r = club61_follows_remover($uid, $followingId);
+    if (!$r['ok']) {
+        http_response_code(400);
+        echo json_encode(['success' => false, 'message' => $r['error'] ?? 'Não foi possível remover']);
+
+        exit;
+    }
+    echo json_encode([
+        'success' => true,
+        'state' => 'none',
+        'followers_count' => (int) ($r['followers_count'] ?? club61_follows_count_followers_accepted($followingId)),
     ]);
 
     exit;

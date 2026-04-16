@@ -36,7 +36,7 @@ DirectoryIndex index.php index.html
     RewriteRule ^post/delete/?$ /features/feed/delete_post.php [L,QSA]
 
     # Follow (JSON)
-    RewriteRule ^follow/(enviar|aceitar|recusar)/?$ /features/follow/follow_api.php [L,QSA]
+    RewriteRule ^follow/(enviar|aceitar|recusar|remover)/?$ /features/follow/follow_api.php [L,QSA]
 
     # Mensagens privadas (página + API JSON)
     RewriteRule ^mensagens/(lista|conversa|enviar|lida)/?$ /features/messages/messages_api.php [L,QSA]

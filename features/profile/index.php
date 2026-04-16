@@ -217,11 +217,6 @@ $clLabel = is_array($profileRow)
     ? club61_display_id_label(isset($profileRow['display_id']) ? (string) $profileRow['display_id'] : null)
     : club61_display_id_label(null);
 
-if ($profile_lookup_id !== '' && profile_stats_service_ok()) {
-    $statPosts = profile_count_posts($profile_lookup_id);
-    $statLikesRecv = profile_count_likes_received($profile_lookup_id);
-}
-
 $pendingFollowCount = 0;
 $pendingFollowRows = [];
 if ($profile_lookup_id !== '' && club61_follows_service_ok()) {
@@ -277,6 +272,16 @@ if (
         if (is_array($decodedPosts)) {
             $myPosts = $decodedPosts;
         }
+    }
+}
+
+if ($profile_lookup_id !== '') {
+    if (profile_stats_service_ok()) {
+        $statPosts = profile_count_posts($profile_lookup_id);
+        $statLikesRecv = profile_count_likes_received($profile_lookup_id);
+    } else {
+        $statPosts = count($myPosts);
+        $statLikesRecv = 0;
     }
 }
 
@@ -977,15 +982,27 @@ $igShowRel = trim($profileRelationship) !== '';
             flex:1;min-width:0;text-align:center;padding:9px 14px;font-size:0.82rem;font-weight:700;border-radius:8px;
             cursor:pointer;font-family:inherit;border:none;
         }
-        .btn-follow-ig--segue{background:#7B2EFF;color:#fff}
-        .btn-follow-ig--seguindo{background:transparent;color:#7B2EFF;border:2px solid #7B2EFF}
-        .btn-follow-ig--pendente{background:#2a2a2a;color:#AAAAAA;border:1px solid #333}
+        .btn-follow-ig--segue,.btn-seguir{
+            background:#7B2EFF;color:#fff;border:none;padding:8px 20px;border-radius:8px;
+            cursor:pointer;font-weight:700;font-size:0.82rem;font-family:inherit;
+        }
+        .btn-follow-ig--seguindo,.btn-seguindo{
+            background:transparent;color:#7B2EFF;border:2px solid #7B2EFF;padding:8px 20px;border-radius:8px;
+            cursor:pointer;font-weight:600;font-size:0.82rem;font-family:inherit;
+        }
+        .btn-follow-ig--pendente,.btn-solicitado{
+            background:#1a1a1a;color:#aaa;border:1px solid #2a2a2a;padding:8px 20px;border-radius:8px;
+            cursor:default;font-size:0.82rem;font-family:inherit;
+        }
         .btn-msg-ig{
             flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;
             padding:9px 14px;font-size:0.82rem;font-weight:600;border-radius:8px;text-decoration:none;
             background:#1a1a1a;border:1px solid #2a2a2a;color:#eee;
         }
         .btn-msg-ig:hover{border-color:#C9A84C;color:#C9A84C}
+        .btn-mensagem{background:#1a1a1a;color:#fff;border:1px solid #2a2a2a;padding:8px 20px;border-radius:8px;
+            cursor:pointer;font-size:0.82rem;font-weight:600;text-decoration:none;display:inline-flex;align-items:center;gap:6px}
+        .btn-mensagem:hover{border-color:#C9A84C;color:#C9A84C}
         .ig-actions-row{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;width:100%;max-width:420px}
         .ig-dono{font-size:0.88rem;color:#C9A84C;margin:6px 0 4px;font-weight:600}
         .follow-requests-modal{
@@ -1061,13 +1078,13 @@ $igShowRel = trim($profileRelationship) !== '';
                             <?php if (club61_follows_service_ok()): ?>
                                 <?php
                                 $flabel = 'Seguir';
-                                $fclass = 'btn-follow-ig btn-follow-ig--segue';
+                                $fclass = 'btn-follow-ig btn-follow-ig--segue btn-seguir';
                                 if ($followUiState === 'aceito') {
                                     $flabel = 'Seguindo';
-                                    $fclass = 'btn-follow-ig btn-follow-ig--seguindo';
+                                    $fclass = 'btn-follow-ig btn-follow-ig--seguindo btn-seguindo';
                                 } elseif ($followUiState === 'pendente') {
                                     $flabel = 'Solicitado';
-                                    $fclass = 'btn-follow-ig btn-follow-ig--pendente';
+                                    $fclass = 'btn-follow-ig btn-follow-ig--pendente btn-solicitado';
                                 }
                                 ?>
                             <button type="button" id="profile-follow-btn" class="<?= htmlspecialchars($fclass, ENT_QUOTES, 'UTF-8') ?>"
@@ -1084,7 +1101,7 @@ $igShowRel = trim($profileRelationship) !== '';
                             </button>
                             <?php endif; ?>
                             <?php if ($mrBtn === 'accepted'): ?>
-                            <a class="btn-msg-ig" href="/features/messages/index.php?com=<?= rawurlencode((string) $profile_lookup_id) ?>">✉️ Mensagem</a>
+                            <a class="btn-msg-ig btn-mensagem" href="/mensagens?com=<?= rawurlencode((string) $profile_lookup_id) ?>">✉️ Mensagem</a>
                             <?php elseif ($mrBtn !== 'hidden'): ?>
                                 <?php if ($mrBtn === 'request'): ?>
                                 <form action="/features/profile/message_request.php" method="post" style="flex:1;min-width:120px">
@@ -1237,35 +1254,85 @@ $igShowRel = trim($profileRelationship) !== '';
         var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
         var USE_FOLLOWS = <?= club61_follows_service_ok() ? 'true' : 'false' ?>;
         var FOLLOW_API = '/features/follow/follow_api.php';
+        var FOLLOW_ENVIAR_URLS = ['/follow/enviar', '/features/follow/follow_api.php?r=enviar'];
+        var FOLLOW_REMOVER_URLS = ['/follow/remover', '/features/follow/follow_api.php?r=remover'];
         var followBtn = document.getElementById('profile-follow-btn');
         var followersEl = document.getElementById('profile-followers-count');
+        function applyFollowButtonState(state) {
+            if (!followBtn) return;
+            followBtn.setAttribute('data-state', state);
+            if (state === 'aceito') {
+                followBtn.textContent = 'Seguindo';
+                followBtn.className = 'btn-follow-ig btn-follow-ig--seguindo btn-seguindo';
+            } else if (state === 'pendente') {
+                followBtn.textContent = 'Solicitado';
+                followBtn.className = 'btn-follow-ig btn-follow-ig--pendente btn-solicitado';
+            } else {
+                followBtn.textContent = 'Seguir';
+                followBtn.className = 'btn-follow-ig btn-follow-ig--segue btn-seguir';
+            }
+        }
+        function postFollowJson(urls, payload) {
+            function tryAt(i) {
+                if (i >= urls.length) {
+                    return Promise.reject(new Error('Não foi possível conectar ao servidor.'));
+                }
+                return fetch(urls[i], {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify(payload)
+                })
+                    .then(function (r) {
+                        return r.text().then(function (txt) {
+                            var j = null;
+                            try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+                            return { r: r, j: j };
+                        });
+                    })
+                    .then(function (o) {
+                        var ok = o.j && (o.j.success === true || o.j.ok === true);
+                        if (o.r.ok && ok) return o.j;
+                        if (o.r.status === 404 && i + 1 < urls.length) return tryAt(i + 1);
+                        var msg = (o.j && (o.j.message || o.j.error)) ? String(o.j.message || o.j.error) : ('HTTP ' + o.r.status);
+                        var err = new Error(msg);
+                        err._noFollowRetry = true;
+                        throw err;
+                    })
+                    .catch(function (err) {
+                        if (err && err._noFollowRetry) throw err;
+                        if (i + 1 < urls.length) return tryAt(i + 1);
+                        throw err || new Error('Erro de rede.');
+                    });
+            }
+            return tryAt(0);
+        }
         if (followBtn) {
             followBtn.addEventListener('click', function () {
                 var fid = followBtn.getAttribute('data-following-id');
                 if (!fid) return;
                 var st = followBtn.getAttribute('data-state') || '';
                 if (USE_FOLLOWS) {
-                    if (st === 'pendente' || st === 'aceito') return;
+                    if (st === 'pendente') return;
+                    if (st === 'aceito') {
+                        if (!confirm('Deixar de seguir?')) return;
+                        followBtn.disabled = true;
+                        postFollowJson(FOLLOW_REMOVER_URLS, { following_id: fid, csrf: PROFILE_CSRF })
+                            .then(function () { location.reload(); })
+                            .catch(function (e) { alert('Erro: ' + (e && e.message ? e.message : 'rede')); })
+                            .finally(function () { followBtn.disabled = false; });
+                        return;
+                    }
                     followBtn.disabled = true;
-                    fetch(FOLLOW_API + '?r=enviar', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'same-origin',
-                        body: JSON.stringify({ following_id: fid, csrf: PROFILE_CSRF })
-                    })
-                        .then(function (r) { return r.json(); })
+                    postFollowJson(FOLLOW_ENVIAR_URLS, { following_id: fid, csrf: PROFILE_CSRF })
                         .then(function (d) {
-                            if (!d || !d.success) return;
-                            followBtn.setAttribute('data-state', d.state || 'pendente');
-                            followBtn.textContent = (d.state === 'aceito') ? 'Seguindo' : 'Solicitado';
-                            followBtn.className = (d.state === 'aceito')
-                                ? 'btn-follow-ig btn-follow-ig--seguindo'
-                                : 'btn-follow-ig btn-follow-ig--pendente';
+                            var ns = d.state || 'pendente';
+                            applyFollowButtonState(ns);
                             if (followersEl && typeof d.followers_count === 'number') {
                                 followersEl.textContent = String(d.followers_count);
                             }
                         })
-                        .catch(function () {})
+                        .catch(function (e) { alert('Erro: ' + (e && e.message ? e.message : 'rede')); })
                         .finally(function () { followBtn.disabled = false; });
                     return;
                 }

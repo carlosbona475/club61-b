@@ -11,6 +11,10 @@
 
 declare(strict_types=1);
 
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+error_reporting(E_ALL);
+
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
@@ -19,9 +23,20 @@ require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
 
-// Service role obrigatória para ler perfil e operações admin
-if (!defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+// Service role obrigatória para ler perfil e operações admin (variáveis vêm de .env via config/supabase.php)
+if (!defined('SUPABASE_URL') || SUPABASE_URL === ''
+    || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+    error_log('[admin] SUPABASE_URL ou SUPABASE_SERVICE_KEY ausentes.');
     header('Location: /features/feed/index.php?status=error&message=' . urlencode('Serviço indisponível.'));
+    exit;
+}
+
+if (!function_exists('curl_init')) {
+    error_log('[admin] Extensão PHP curl não está disponível.');
+    http_response_code(503);
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Admin</title></head><body style="background:#0A0A0A;color:#fff;font-family:system-ui;padding:24px">';
+    echo '<p>O painel admin precisa da extensão <strong>curl</strong> do PHP ativa no servidor.</p></body></html>';
     exit;
 }
 
@@ -77,6 +92,8 @@ function admin_curl_exec_full(string $url, array $options): array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_SSL_VERIFYPEER => false,
         CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 30,
     ];
     curl_setopt_array($ch, $options + $defaults);
     $body = curl_exec($ch);
@@ -156,8 +173,35 @@ function admin_json_get_list(string $pathAndQuery): array
         return [];
     }
     $rows = json_decode($res['body'], true);
+    if (!is_array($rows)) {
+        return [];
+    }
+    // PostgREST devolve objeto de erro em vez de array de linhas
+    if (isset($rows['code'], $rows['message']) && !isset($rows[0])) {
+        error_log('[admin] PostgREST: ' . (string) $rows['message']);
+        return [];
+    }
+    if ($rows === []) {
+        return [];
+    }
+    // Lista de registos (preferido)
+    if (function_exists('array_is_list')) {
+        if (array_is_list($rows)) {
+            return $rows;
+        }
+    } else {
+        $keys = array_keys($rows);
+        $expected = range(0, count($rows) - 1);
+        if ($keys === $expected) {
+            return $rows;
+        }
+    }
+    // Único objeto { id: ... }
+    if (isset($rows['id'])) {
+        return [$rows];
+    }
 
-    return is_array($rows) ? $rows : [];
+    return [];
 }
 
 function admin_json_post(string $path, string $jsonBody): int
@@ -406,6 +450,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // GET: dados paginados + estatísticas
 // ---------------------------------------------------------------------------
 
+try {
 $csrf = admin_csrf_token();
 
 $tab = (string) ($_GET['tab'] ?? 'dashboard');
@@ -442,9 +487,9 @@ $new_members_today = admin_count_exact('/rest/v1/profiles?select=id&created_at=g
 $convitesDisp = admin_count_exact('/rest/v1/invites?select=id&used_by=is.null&expires_at=gt.' . rawurlencode($nowIso));
 $convitesUsados = admin_count_exact('/rest/v1/invites?select=id&used_by=not.is.null');
 $totalInvitesAvailable = admin_count_exact('/rest/v1/invites?select=id&status=eq.available');
-$totalAdmins = admin_count_exact(
-    '/rest/v1/profiles?select=id&or=(role.eq.admin,is_admin.eq.true)'
-);
+// Admins: role=admin OU (is_admin sem ser já contado em role=admin) — evita filtro or= frágil no PostgREST
+$totalAdmins = admin_count_exact('/rest/v1/profiles?select=id&role=eq.admin')
+    + admin_count_exact('/rest/v1/profiles?select=id&is_admin=eq.true&role=neq.admin');
 
 $membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,is_admin,created_at,cidade'
     . '&order=created_at.asc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetMembers;
@@ -533,6 +578,17 @@ $totalStoriesPages = max(1, (int) ceil(max(0, $total_stories_active) / ADMIN_PAG
 
 $flashStatus = (string) ($_GET['status'] ?? '');
 $flashMessage = (string) ($_GET['message'] ?? '');
+} catch (Throwable $e) {
+    error_log('[admin] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    http_response_code(503);
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Admin — erro</title></head>';
+    echo '<body style="background:#0A0A0A;color:#e0e0e0;font-family:system-ui,sans-serif;padding:24px;max-width:560px">';
+    echo '<h1 style="color:#C9A84C;font-size:1.1rem">Painel admin temporariamente indisponível</h1>';
+    echo '<p>Ocorreu um erro ao carregar dados. Detalhes foram registados no log do servidor (PHP error log).</p>';
+    echo '<p><a href="/features/feed/index.php" style="color:#7B2EFF">Voltar ao feed</a></p></body></html>';
+    exit;
+}
 
 /**
  * @param array<string, mixed>|null $row

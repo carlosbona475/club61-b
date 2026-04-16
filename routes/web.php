@@ -16,5 +16,9 @@ return [
     '/admin' => '/features/admin/index.php',
     '/admin/' => '/features/admin/index.php',
 
+    /** @see LegacyController::adminPanel() — em produção o .htaccess aponta /admin para o PHP acima */
+    'GET /admin' => [LegacyController::class, 'adminPanel'],
+    'GET /admin/' => [LegacyController::class, 'adminPanel'],
+
     'POST /post/delete' => [LegacyController::class, 'deletePost'],
 ];

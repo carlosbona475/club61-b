@@ -78,4 +78,13 @@ final class LegacyController
 
         echo json_encode(['success' => true], JSON_UNESCAPED_UNICODE);
     }
+
+    /**
+     * GET /admin — painel (Apache normalmente reescreve /admin → features/admin/index.php).
+     * Útil se um front controller invocar rotas definidas em routes/web.php.
+     */
+    public function adminPanel(): void
+    {
+        require dirname(__DIR__, 2) . '/features/admin/index.php';
+    }
 }

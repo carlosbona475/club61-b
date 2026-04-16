@@ -98,8 +98,8 @@ $chatApi = '/features/chat/chat_actions.php';
 $chatEp = [
     'messages' => $chatApi . '?r=messages',
     'messagesShort' => '/chat/messages',
-    'send' => $chatApi . '?r=send',
-    'sendShort' => '/chat/enviar',
+    'send' => '/chat/enviar',
+    'sendFallback' => $chatApi . '?r=send',
     'react' => $chatApi . '?r=react',
     'online' => $chatApi . '?r=online',
     'presence' => $chatApi . '?r=presence',
@@ -176,31 +176,27 @@ body.gm-body{
   flex-shrink:0;border-top:1px solid #2a2a2a;background:#0A0A0A;
   padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
 }
-.uol-preview{
-  display:none;align-items:center;gap:10px;padding:8px 10px;background:#111;border:1px solid #2a2a2a;border-radius:10px;margin-bottom:8px;
-}
-.uol-preview.is-on{display:flex}
-.uol-preview img{max-width:72px;max-height:72px;border-radius:8px;display:none;border:1px solid #2a2a2a}
-.uol-preview img.is-on{display:block}
-.uol-preview-meta{font-size:0.78rem;color:#AAAAAA;flex:1;min-width:0;word-break:break-all}
-.uol-preview-x{background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:1.1rem;padding:4px}
 .uol-chat-form{width:100%}
-.uol-input-row{display:flex;gap:8px;align-items:flex-end}
-.uol-btn-ico{
-  width:44px;height:44px;border-radius:12px;border:1px solid #2a2a2a;background:#111;color:#fff;
-  font-size:1.15rem;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+#preview-midia{padding:8px}
+#preview-midia img,#preview-midia video{vertical-align:middle}
+.input-row{
+  display:flex;align-items:center;gap:8px;padding:10px;background:#111;border-top:1px solid #2a2a2a;
 }
-.uol-btn-ico:hover{border-color:#7B2EFF;color:#C9A84C}
-.uol-input{
-  flex:1;min-width:0;background:#111;border:1px solid #2a2a2a;border-radius:12px;color:#fff;padding:10px 12px;
-  font-size:0.95rem;resize:none;max-height:120px;min-height:44px;font-family:inherit;outline:none;
+.btn-anexo{
+  font-size:22px;cursor:pointer;flex-shrink:0;padding:4px;opacity:0.8;transition:opacity 0.2s;line-height:1;
 }
-.uol-input:focus{border-color:#7B2EFF}
-.uol-send{
-  width:44px;height:44px;border-radius:12px;border:none;background:#7B2EFF;color:#fff;font-size:1.1rem;
-  cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+.btn-anexo:hover{opacity:1}
+#input-mensagem{
+  flex:1;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:20px;padding:10px 16px;color:#fff;
+  font-size:14px;outline:none;min-width:0;font-family:inherit;
 }
-.uol-send:hover{filter:brightness(1.08)}
+#input-mensagem:focus{border-color:#7B2EFF}
+.btn-enviar{
+  background:#7B2EFF;border:none;border-radius:50%;width:42px;height:42px;font-size:18px;cursor:pointer;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;line-height:1;
+}
+.btn-enviar:hover{filter:brightness(1.08)}
+.btn-enviar:disabled{opacity:0.6;cursor:not-allowed}
 .ch-top{
   flex-shrink:0;width:100%;display:flex;align-items:center;justify-content:space-between;
   padding:10px 12px;background:#0A0A0A;border-bottom:1px solid #2a2a2a;gap:8px;
@@ -327,9 +323,12 @@ foreach ($initialMessages as $m):
           <?php if ($isMedia && $mediaUrl !== ''): ?>
           <div class="uol-msg-media">
             <?php if ($tipo === 'imagem'): ?>
-            <a href="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener"><img src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>" alt=""></a>
+            <img src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>" alt=""
+                 style="max-width:250px;max-height:250px;border-radius:12px;margin-top:6px;display:block;cursor:pointer;"
+                 onclick="abrirImagem(this.src)">
             <?php else: ?>
-            <video controls preload="metadata" src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>"></video>
+            <video controls preload="metadata" src="<?= htmlspecialchars($mediaUrl, ENT_QUOTES, 'UTF-8') ?>"
+                    style="max-width:250px;border-radius:12px;margin-top:6px;display:block;"></video>
             <?php endif; ?>
           </div>
           <div class="uol-react-row" data-react-for="<?= htmlspecialchars($msgId, ENT_QUOTES, 'UTF-8') ?>">
@@ -353,20 +352,18 @@ foreach ($initialMessages as $m):
     </div>
 
     <div class="uol-inputbar">
-      <div class="uol-preview" id="uolPreview">
-        <img id="uolPreviewImg" class="" src="" alt="">
-        <span class="uol-preview-meta" id="uolPreviewMeta"></span>
-        <button type="button" class="uol-preview-x" id="uolPreviewClear" aria-label="Remover mídia">✕</button>
-      </div>
-      <form id="form-chat" class="uol-chat-form" action="#" method="post" autocomplete="off">
-        <input type="hidden" name="sala_id" id="chat-sala-id" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
-        <div class="uol-input-row">
-          <input type="file" id="uolFile" name="media" accept="image/*,video/mp4,video/webm" style="display:none">
-          <input type="file" id="uolCam" accept="image/*" capture="environment" style="display:none">
-          <button type="button" class="uol-btn-ico" id="uolBtnClip" title="Anexar">📎</button>
-          <button type="button" class="uol-btn-ico" id="uolBtnCam" title="Foto">📷</button>
-          <textarea class="uol-input" id="input-mensagem" name="mensagem" rows="1" maxlength="1000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea>
-          <button type="submit" class="uol-send" id="uolSend" title="Enviar" aria-label="Enviar">&#10148;</button>
+      <form id="form-chat" class="uol-chat-form" action="#" method="post" enctype="multipart/form-data" autocomplete="off">
+        <input type="hidden" name="sala_id" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
+        <div id="preview-midia" style="display:none;padding:8px;">
+          <img id="preview-img" alt="" style="max-height:100px;border-radius:8px;display:none;">
+          <video id="preview-video" style="max-height:100px;border-radius:8px;display:none;" controls></video>
+          <button type="button" onclick="cancelarMidia()" style="background:none;border:none;color:#f44;cursor:pointer;margin-left:8px;">✕ Cancelar</button>
+        </div>
+        <div class="input-row">
+          <label for="input-arquivo" class="btn-anexo" title="Enviar foto ou vídeo">📎</label>
+          <input type="file" id="input-arquivo" name="arquivo" accept="image/*,video/*" style="display:none" onchange="previewArquivo(this)">
+          <input type="text" id="input-mensagem" name="mensagem" maxlength="1000" placeholder="Digite sua mensagem..." autocomplete="off">
+          <button type="submit" class="btn-enviar" id="btn-enviar" title="Enviar" aria-label="Enviar">🚀</button>
         </div>
       </form>
     </div>
@@ -383,6 +380,57 @@ foreach ($initialMessages as $m):
 </nav>
 
 <script>
+var __chatPreviewUrl = null;
+function abrirImagem(src) {
+  var overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;cursor:zoom-out';
+  var im = document.createElement('img');
+  im.src = src;
+  im.style.cssText = 'max-width:90vw;max-height:90vh;border-radius:8px;';
+  overlay.appendChild(im);
+  overlay.onclick = function () { overlay.remove(); };
+  document.body.appendChild(overlay);
+}
+function previewArquivo(input) {
+  var file = input.files && input.files[0];
+  if (!file) return;
+  var previewDiv = document.getElementById('preview-midia');
+  var previewImg = document.getElementById('preview-img');
+  var previewVideo = document.getElementById('preview-video');
+  if (!previewDiv || !previewImg || !previewVideo) return;
+  if (__chatPreviewUrl) {
+    try { URL.revokeObjectURL(__chatPreviewUrl); } catch (e) {}
+    __chatPreviewUrl = null;
+  }
+  previewDiv.style.display = 'block';
+  if (file.type.indexOf('image/') === 0) {
+    __chatPreviewUrl = URL.createObjectURL(file);
+    previewImg.src = __chatPreviewUrl;
+    previewImg.style.display = 'block';
+    previewVideo.style.display = 'none';
+    previewVideo.removeAttribute('src');
+  } else if (file.type.indexOf('video/') === 0) {
+    __chatPreviewUrl = URL.createObjectURL(file);
+    previewVideo.src = __chatPreviewUrl;
+    previewVideo.style.display = 'block';
+    previewImg.style.display = 'none';
+    previewImg.removeAttribute('src');
+  }
+}
+function cancelarMidia() {
+  if (__chatPreviewUrl) {
+    try { URL.revokeObjectURL(__chatPreviewUrl); } catch (e) {}
+    __chatPreviewUrl = null;
+  }
+  var fi = document.getElementById('input-arquivo');
+  var previewDiv = document.getElementById('preview-midia');
+  var previewImg = document.getElementById('preview-img');
+  var previewVideo = document.getElementById('preview-video');
+  if (fi) fi.value = '';
+  if (previewDiv) previewDiv.style.display = 'none';
+  if (previewImg) { previewImg.src = ''; previewImg.style.display = 'none'; }
+  if (previewVideo) { previewVideo.src = ''; previewVideo.style.display = 'none'; }
+}
 (function () {
   var sala = <?= json_encode($sala, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
   var currentUserId = <?= json_encode($current_user_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
@@ -442,9 +490,9 @@ foreach ($initialMessages as $m):
     if (isMedia && m.media_url) {
       html += '<div class="uol-msg-media">';
       if (tipo === 'imagem') {
-        html += '<a href="' + esc(m.media_url) + '" target="_blank" rel="noopener"><img src="' + esc(m.media_url) + '" alt=""></a>';
+        html += '<img src="' + esc(m.media_url) + '" alt="" style="max-width:250px;max-height:250px;border-radius:12px;margin-top:6px;display:block;cursor:pointer;" onclick="abrirImagem(this.src)">';
       } else {
-        html += '<video controls preload="metadata" src="' + esc(m.media_url) + '"></video>';
+        html += '<video controls preload="metadata" src="' + esc(m.media_url) + '" style="max-width:250px;border-radius:12px;margin-top:6px;display:block;"></video>';
       }
       html += '</div>';
       html += renderReactions(msgId, m.reactions || {});
@@ -595,30 +643,39 @@ foreach ($initialMessages as $m):
   var sendInFlight = false;
   function buildChatFormData() {
     var ta = document.getElementById('input-mensagem');
-    var fileEl = document.getElementById('uolFile');
+    var fileEl = document.getElementById('input-arquivo');
     var text = (ta && ta.value) ? ta.value.trim() : '';
     var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
     var fd = new FormData();
-    var salaHidden = document.getElementById('chat-sala-id');
-    var salaVal = (salaHidden && salaHidden.value) ? salaHidden.value.trim() : sala;
+    var salaInp = document.querySelector('#form-chat input[name="sala_id"]');
+    var salaVal = (salaInp && salaInp.value) ? salaInp.value.trim() : sala;
     fd.append('sala_id', salaVal);
     fd.append('mensagem', text);
-    if (hasFile) fd.append('media', fileEl.files[0]);
+    if (hasFile) fd.append('arquivo', fileEl.files[0]);
     return fd;
   }
   function enviarMensagem() {
     var ta = document.getElementById('input-mensagem');
-    var fileEl = document.getElementById('uolFile');
+    var fileEl = document.getElementById('input-arquivo');
     var text = (ta && ta.value) ? ta.value.trim() : '';
     var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
     if (!text && !hasFile) return;
     if (sendInFlight) return;
     var urls = [EP.send];
-    if (EP.sendShort && EP.sendShort !== EP.send) urls.push(EP.sendShort);
+    if (EP.sendFallback && EP.sendFallback !== EP.send) urls.push(EP.sendFallback);
+    var btnEnviar = document.getElementById('btn-enviar');
     sendInFlight = true;
+    if (btnEnviar) {
+      btnEnviar.disabled = true;
+      btnEnviar.textContent = '⏳';
+    }
     function trySend(i) {
       if (i >= urls.length) {
         sendInFlight = false;
+        if (btnEnviar) {
+          btnEnviar.disabled = false;
+          btnEnviar.textContent = '🚀';
+        }
         alert('Não foi possível enviar. Verifique a rede ou a configuração do servidor.');
         return;
       }
@@ -634,10 +691,14 @@ foreach ($initialMessages as $m):
           var ok = o.j && (o.j.ok === true || o.j.success === true);
           if (o.r.ok && ok) {
             if (ta) ta.value = '';
-            clearFile();
+            cancelarMidia();
             carregarMensagens();
             scrollFeedBottom();
             sendInFlight = false;
+            if (btnEnviar) {
+              btnEnviar.disabled = false;
+              btnEnviar.textContent = '🚀';
+            }
             return;
           }
           if (o.r.status === 404 && i + 1 < urls.length) {
@@ -645,6 +706,10 @@ foreach ($initialMessages as $m):
             return;
           }
           sendInFlight = false;
+          if (btnEnviar) {
+            btnEnviar.disabled = false;
+            btnEnviar.textContent = '🚀';
+          }
           var msg = (o.j && (o.j.message || o.j.detail)) ? String(o.j.message || o.j.detail) : (o.txt || ('HTTP ' + o.r.status));
           console.error('chat send', o.r.status, o.j || o.txt);
           alert('Erro ao enviar: ' + msg);
@@ -655,76 +720,22 @@ foreach ($initialMessages as $m):
             return;
           }
           sendInFlight = false;
+          if (btnEnviar) {
+            btnEnviar.disabled = false;
+            btnEnviar.textContent = '🚀';
+          }
           console.error('chat send', err);
-          alert('Erro de conexão ao enviar mensagem.');
+          alert('Erro de conexão. Verifique sua internet.');
         });
     }
     trySend(0);
   }
 
-  function clearFile() {
-    var fileEl = document.getElementById('uolFile');
-    var prev = document.getElementById('uolPreview');
-    var img = document.getElementById('uolPreviewImg');
-    var meta = document.getElementById('uolPreviewMeta');
-    if (fileEl) fileEl.value = '';
-    if (img) { img.src = ''; img.classList.remove('is-on'); }
-    if (meta) meta.textContent = '';
-    if (prev) prev.classList.remove('is-on');
-  }
-
-  document.getElementById('uolBtnClip').addEventListener('click', function () {
-    document.getElementById('uolFile').click();
-  });
-  document.getElementById('uolBtnCam').addEventListener('click', function () {
-    document.getElementById('uolCam').click();
-  });
-  document.getElementById('uolCam').addEventListener('change', function () {
-    var f = this.files && this.files[0];
-    if (!f) return;
-    try {
-      var dt = new DataTransfer();
-      dt.items.add(f);
-      document.getElementById('uolFile').files = dt.files;
-    } catch (e) {}
-    document.getElementById('uolFile').dispatchEvent(new Event('change'));
-  });
-  document.getElementById('uolFile').addEventListener('change', function () {
-    var file = this.files && this.files[0];
-    var prev = document.getElementById('uolPreview');
-    var img = document.getElementById('uolPreviewImg');
-    var meta = document.getElementById('uolPreviewMeta');
-    if (!file) { clearFile(); return; }
-    prev.classList.add('is-on');
-    if (file.type.indexOf('image/') === 0) {
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        img.src = e.target.result;
-        img.classList.add('is-on');
-        meta.textContent = '';
-      };
-      reader.readAsDataURL(file);
-    } else {
-      img.classList.remove('is-on');
-      img.src = '';
-      meta.textContent = '🎥 ' + file.name;
-    }
-  });
-  document.getElementById('uolPreviewClear').addEventListener('click', clearFile);
   var formChat = document.getElementById('form-chat');
   if (formChat) {
     formChat.addEventListener('submit', function (e) {
       e.preventDefault();
       enviarMensagem();
-    });
-  }
-  var ta = document.getElementById('input-mensagem');
-  if (ta) {
-    ta.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter' && !e.shiftKey) {
-        e.preventDefault();
-        enviarMensagem();
-      }
     });
   }
 

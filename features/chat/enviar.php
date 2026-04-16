@@ -1,11 +1,14 @@
 <?php
 
 /**
- * Alias POST /features/chat/enviar.php → mesmo handler que ?r=send
- * (útil se mod_rewrite não mapear /chat/enviar para chat_actions.php).
+ * POST /features/chat/enviar.php e /chat/enviar (rewrite) → LegacyController::enviarMensagem
+ * (JSON; multipart com texto e/ou arquivo `arquivo` ou `media`).
  */
 
 declare(strict_types=1);
 
-$_GET['r'] = 'send';
-require __DIR__ . '/chat_actions.php';
+require_once dirname(__DIR__, 2) . '/bootstrap/app.php';
+
+use Club61\Controllers\LegacyController;
+
+(new LegacyController())->enviarMensagem();

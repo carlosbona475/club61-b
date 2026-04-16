@@ -144,8 +144,15 @@ if ($route === 'send' && $method === 'POST') {
     if ($isMultipart) {
         $salaId = trim((string) ($_POST['sala_id'] ?? ''));
         $content = trim((string) ($_POST['mensagem'] ?? $_POST['message'] ?? $_POST['content'] ?? ''));
-        if (!empty($_FILES['media']) && is_array($_FILES['media']) && (int) ($_FILES['media']['error'] ?? 0) === UPLOAD_ERR_OK) {
-            $file = $_FILES['media'];
+        $fileKey = null;
+        foreach (['arquivo', 'media'] as $fk) {
+            if (!empty($_FILES[$fk]) && is_array($_FILES[$fk]) && (int) ($_FILES[$fk]['error'] ?? 0) === UPLOAD_ERR_OK) {
+                $fileKey = $fk;
+                break;
+            }
+        }
+        if ($fileKey !== null) {
+            $file = $_FILES[$fileKey];
             $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'];
             $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'video/mp4' => 'mp4', 'video/webm' => 'webm'];
             $mime = '';

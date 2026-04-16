@@ -9,8 +9,8 @@ use Club61\Controllers\LegacyController;
  *
  * POST /post/delete → features/feed/delete_post.php → LegacyController::deletePost
  *
- * Chat JSON (não usa este ficheiro): GET/POST /chat/messages, /chat/send, /chat/enviar,
- * /chat/react, /chat/online, /chat/presence → features/chat/chat_actions.php (ver .htaccess).
+ * Chat JSON (Apache .htaccess): GET /chat/messages, POST /chat/send → chat_actions.php;
+ * POST /chat/enviar → features/chat/enviar.php (LegacyController::enviarMensagem). Demais /chat/* em chat_actions.php.
  */
 return [
     '/admin' => '/features/admin/index.php',
@@ -21,4 +21,7 @@ return [
     'GET /admin/' => [LegacyController::class, 'adminPanel'],
 
     'POST /post/delete' => [LegacyController::class, 'deletePost'],
+
+    /** @see LegacyController::enviarMensagem — em Apache: .htaccess mapeia /chat/enviar → features/chat/enviar.php */
+    'POST /chat/enviar' => [LegacyController::class, 'enviarMensagem'],
 ];

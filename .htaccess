@@ -28,7 +28,7 @@ DirectoryIndex index.php index.html
     # API JSON do chat (atalhos /chat/…)
     RewriteRule ^chat/messages/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/send/?$ /features/chat/chat_actions.php [L,QSA]
-    RewriteRule ^chat/enviar/?$ /features/chat/chat_actions.php?r=send [L,QSA]
+    RewriteRule ^chat/enviar/?$ /features/chat/enviar.php [L,QSA]
     RewriteRule ^chat/react/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/online/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/presence/?$ /features/chat/chat_actions.php [L,QSA]

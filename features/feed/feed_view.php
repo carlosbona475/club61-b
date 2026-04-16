@@ -167,6 +167,11 @@ a{color:inherit}
 .bottomnav a:hover,.bottomnav .nav-fab-wrap:hover{color:#ccc}
 .bottomnav a.bnav-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:#888;font-size:0.62rem;text-decoration:none;padding:6px 8px}
 .bottomnav a.bnav-btn span:first-child{font-size:1.15rem;line-height:1}
+.nav-dm-inner{position:relative;display:inline-block}
+.nav-dm-badge{
+  position:absolute;top:-7px;right:-10px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:#7B2EFF;color:#fff;font-size:0.58rem;font-weight:800;line-height:16px;text-align:center;
+}
 .nav-fab{
   width:44px;height:44px;border-radius:14px;background:#7B2EFF;color:#fff;border:none;
   font-size:1.5rem;font-weight:300;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;
@@ -376,6 +381,7 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
   <a href="/features/feed/index.php"><span>🏠</span>Feed</a>
   <a href="/features/profile/upload_story.php"><span>📷</span>Story</a>
   <a class="bnav-btn" href="/features/chat/salas.php"><span>💬</span><span>Chat</span></a>
+  <a class="bnav-btn" href="/features/messages/index.php"><span class="nav-dm-inner">✉️<?php if (!empty($dmUnread)): ?><span class="nav-dm-badge" aria-label="Mensagens não lidas"><?= ((int) $dmUnread > 99) ? '99+' : (int) $dmUnread ?></span><?php endif; ?></span><span>Mensagens</span></a>
   <button type="button" class="nav-fab-wrap" id="openPostModal" aria-label="Nova publicação"><span class="nav-fab" aria-hidden="true">＋</span><span style="font-size:0.6rem;opacity:0">.</span></button>
   <a href="/features/profile/index.php"><span>👤</span>Perfil</a>
   <?php if ($is_admin): ?>

@@ -29,3 +29,7 @@ CREATE TABLE IF NOT EXISTS public.chat_presence (
 CREATE INDEX IF NOT EXISTS idx_chat_messages_sala_created ON public.chat_messages (sala_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_chat_reactions_message ON public.chat_reactions (message_id);
 CREATE INDEX IF NOT EXISTS idx_chat_presence_sala_seen ON public.chat_presence (sala_id, last_seen DESC);
+
+-- O backend PHP usa SUPABASE_SERVICE_KEY (service_role), que ignora RLS.
+-- Se um cliente anon/authenticated aceder a chat_messages via PostgREST, defina políticas à medida.
+-- Garanta que existe linha em public.profiles para cada user_id — senão INSERT em chat_messages falha (FK).

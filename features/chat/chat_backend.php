@@ -318,10 +318,20 @@ function club61_chat_insert_message(
         ]),
     ]);
     $raw = curl_exec($ch);
-    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     if ($raw === false || $code < 200 || $code >= 300) {
-        return ['ok' => false, 'error' => 'insert'];
+        $detail = is_string($raw) ? trim($raw) : '';
+        if (strlen($detail) > 800) {
+            $detail = substr($detail, 0, 800) . '…';
+        }
+
+        return [
+            'ok' => false,
+            'error' => 'insert',
+            'detail' => $detail !== '' ? $detail : ('HTTP ' . $code),
+            'http_code' => $code,
+        ];
     }
     $dec = json_decode($raw, true);
     if (is_array($dec) && isset($dec[0]['id'])) {

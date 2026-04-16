@@ -12,8 +12,17 @@ require_once __DIR__ . '/chat_backend.php';
 $current_user_id = trim((string) ($_SESSION['user_id'] ?? ''));
 $access_token = trim((string) ($_SESSION['access_token'] ?? ''));
 
-if ($current_user_id === '' || $access_token === '' || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+if ($current_user_id === '' || $access_token === '') {
     header('Location: /features/auth/login.php');
+    exit;
+}
+
+$chatServiceOk = defined('SUPABASE_SERVICE_KEY') && SUPABASE_SERVICE_KEY !== '';
+if (!$chatServiceOk) {
+    http_response_code(503);
+    echo '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Chat indisponível</title></head><body style="background:#0A0A0A;color:#fff;font-family:system-ui;padding:24px">';
+    echo '<p>Chat geral indisponível: configure <strong>SUPABASE_SERVICE_KEY</strong> no servidor.</p>';
+    echo '<p><a href="/features/chat/salas.php" style="color:#C9A84C">Voltar às salas</a></p></body></html>';
     exit;
 }
 
@@ -85,9 +94,12 @@ if ($initialMessages !== []) {
 }
 
 $chatApi = '/features/chat/chat_actions.php';
+/** Caminhos absolutos na raiz do site; /chat/* exige mod_rewrite (veja .htaccess). Fallback sempre funciona. */
 $chatEp = [
     'messages' => $chatApi . '?r=messages',
+    'messagesShort' => '/chat/messages',
     'send' => $chatApi . '?r=send',
+    'sendShort' => '/chat/enviar',
     'react' => $chatApi . '?r=react',
     'online' => $chatApi . '?r=online',
     'presence' => $chatApi . '?r=presence',
@@ -172,6 +184,7 @@ body.gm-body{
 .uol-preview img.is-on{display:block}
 .uol-preview-meta{font-size:0.78rem;color:#AAAAAA;flex:1;min-width:0;word-break:break-all}
 .uol-preview-x{background:none;border:none;color:#ff6b6b;cursor:pointer;font-size:1.1rem;padding:4px}
+.uol-chat-form{width:100%}
 .uol-input-row{display:flex;gap:8px;align-items:flex-end}
 .uol-btn-ico{
   width:44px;height:44px;border-radius:12px;border:1px solid #2a2a2a;background:#111;color:#fff;
@@ -345,14 +358,17 @@ foreach ($initialMessages as $m):
         <span class="uol-preview-meta" id="uolPreviewMeta"></span>
         <button type="button" class="uol-preview-x" id="uolPreviewClear" aria-label="Remover mídia">✕</button>
       </div>
-      <div class="uol-input-row">
-        <input type="file" id="uolFile" name="media" accept="image/*,video/mp4,video/webm" style="display:none">
-        <input type="file" id="uolCam" accept="image/*" capture="environment" style="display:none">
-        <button type="button" class="uol-btn-ico" id="uolBtnClip" title="Anexar">📎</button>
-        <button type="button" class="uol-btn-ico" id="uolBtnCam" title="Foto">📷</button>
-        <textarea class="uol-input" id="msgInput" rows="1" maxlength="1000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea>
-        <button type="button" class="uol-send" id="uolSend" title="Enviar" aria-label="Enviar">&#10148;</button>
-      </div>
+      <form id="form-chat" class="uol-chat-form" action="#" method="post" autocomplete="off">
+        <input type="hidden" name="sala_id" id="chat-sala-id" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
+        <div class="uol-input-row">
+          <input type="file" id="uolFile" name="media" accept="image/*,video/mp4,video/webm" style="display:none">
+          <input type="file" id="uolCam" accept="image/*" capture="environment" style="display:none">
+          <button type="button" class="uol-btn-ico" id="uolBtnClip" title="Anexar">📎</button>
+          <button type="button" class="uol-btn-ico" id="uolBtnCam" title="Foto">📷</button>
+          <textarea class="uol-input" id="input-mensagem" name="mensagem" rows="1" maxlength="1000" placeholder="Escreva uma mensagem…" autocomplete="off"></textarea>
+          <button type="submit" class="uol-send" id="uolSend" title="Enviar" aria-label="Enviar">&#10148;</button>
+        </div>
+      </form>
     </div>
   </section>
 </div>
@@ -576,25 +592,74 @@ foreach ($initialMessages as $m):
     }).catch(function () {});
   }
 
+  var sendInFlight = false;
+  function buildChatFormData() {
+    var ta = document.getElementById('input-mensagem');
+    var fileEl = document.getElementById('uolFile');
+    var text = (ta && ta.value) ? ta.value.trim() : '';
+    var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
+    var fd = new FormData();
+    var salaHidden = document.getElementById('chat-sala-id');
+    var salaVal = (salaHidden && salaHidden.value) ? salaHidden.value.trim() : sala;
+    fd.append('sala_id', salaVal);
+    fd.append('mensagem', text);
+    if (hasFile) fd.append('media', fileEl.files[0]);
+    return fd;
+  }
   function enviarMensagem() {
-    var ta = document.getElementById('msgInput');
+    var ta = document.getElementById('input-mensagem');
     var fileEl = document.getElementById('uolFile');
     var text = (ta && ta.value) ? ta.value.trim() : '';
     var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
     if (!text && !hasFile) return;
-    var fd = new FormData();
-    fd.append('sala_id', sala);
-    fd.append('mensagem', text);
-    if (hasFile) fd.append('media', fileEl.files[0]);
-    fetch(EP.send, { method: 'POST', credentials: 'same-origin', body: fd })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || !data.ok) return;
-        if (ta) ta.value = '';
-        clearFile();
-        carregarMensagens();
-      })
-      .catch(function () {});
+    if (sendInFlight) return;
+    var urls = [EP.send];
+    if (EP.sendShort && EP.sendShort !== EP.send) urls.push(EP.sendShort);
+    sendInFlight = true;
+    function trySend(i) {
+      if (i >= urls.length) {
+        sendInFlight = false;
+        alert('Não foi possível enviar. Verifique a rede ou a configuração do servidor.');
+        return;
+      }
+      fetch(urls[i], { method: 'POST', credentials: 'same-origin', body: buildChatFormData() })
+        .then(function (r) {
+          return r.text().then(function (txt) {
+            var j = null;
+            try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
+            return { r: r, j: j, txt: txt };
+          });
+        })
+        .then(function (o) {
+          var ok = o.j && (o.j.ok === true || o.j.success === true);
+          if (o.r.ok && ok) {
+            if (ta) ta.value = '';
+            clearFile();
+            carregarMensagens();
+            scrollFeedBottom();
+            sendInFlight = false;
+            return;
+          }
+          if (o.r.status === 404 && i + 1 < urls.length) {
+            trySend(i + 1);
+            return;
+          }
+          sendInFlight = false;
+          var msg = (o.j && (o.j.message || o.j.detail)) ? String(o.j.message || o.j.detail) : (o.txt || ('HTTP ' + o.r.status));
+          console.error('chat send', o.r.status, o.j || o.txt);
+          alert('Erro ao enviar: ' + msg);
+        })
+        .catch(function (err) {
+          if (i + 1 < urls.length) {
+            trySend(i + 1);
+            return;
+          }
+          sendInFlight = false;
+          console.error('chat send', err);
+          alert('Erro de conexão ao enviar mensagem.');
+        });
+    }
+    trySend(0);
   }
 
   function clearFile() {
@@ -646,8 +711,14 @@ foreach ($initialMessages as $m):
     }
   });
   document.getElementById('uolPreviewClear').addEventListener('click', clearFile);
-  document.getElementById('uolSend').addEventListener('click', enviarMensagem);
-  var ta = document.getElementById('msgInput');
+  var formChat = document.getElementById('form-chat');
+  if (formChat) {
+    formChat.addEventListener('submit', function (e) {
+      e.preventDefault();
+      enviarMensagem();
+    });
+  }
+  var ta = document.getElementById('input-mensagem');
   if (ta) {
     ta.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && !e.shiftKey) {

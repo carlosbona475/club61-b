@@ -34,6 +34,8 @@ require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/profile_stats.php';
 require_once CLUB61_ROOT . '/config/message_requests.php';
 require_once CLUB61_ROOT . '/config/followers.php';
+require_once CLUB61_ROOT . '/config/follows_status.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
 
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
@@ -56,6 +58,7 @@ $statLikesRecv = 0;
 $statFollowersCount = 0;
 $statFollowingCount = 0;
 $isFollowingProfile = false;
+$followUiState = 'none';
 $mrBtn = 'hidden';
 $is_admin = false;
 
@@ -219,18 +222,26 @@ if ($profile_lookup_id !== '' && profile_stats_service_ok()) {
     $statLikesRecv = profile_count_likes_received($profile_lookup_id);
 }
 
-if ($profile_lookup_id !== '' && followers_service_ok()) {
+$pendingFollowCount = 0;
+$pendingFollowRows = [];
+if ($profile_lookup_id !== '' && club61_follows_service_ok()) {
+    $statFollowersCount = club61_follows_count_followers_accepted($profile_lookup_id);
+    $statFollowingCount = club61_follows_count_following_accepted($profile_lookup_id);
+    if (!$is_own_profile && $current_user_id !== null) {
+        $followUiState = club61_follows_relation_state((string) $current_user_id, $profile_lookup_id);
+        $isFollowingProfile = ($followUiState === 'aceito');
+    }
+    if ($is_own_profile && $current_user_id !== null) {
+        $pendingFollowCount = club61_follows_pending_incoming_count((string) $current_user_id);
+        $pendingFollowRows = club61_follows_pending_incoming_list((string) $current_user_id, 30);
+    }
+} elseif ($profile_lookup_id !== '' && followers_service_ok()) {
     $statFollowersCount = getFollowersCount($profile_lookup_id);
     $statFollowingCount = getFollowingCount($profile_lookup_id);
-}
-
-if (
-    !$is_own_profile
-    && $current_user_id !== null
-    && $profile_lookup_id !== ''
-    && followers_service_ok()
-) {
-    $isFollowingProfile = followers_is_following((string) $current_user_id, (string) $profile_lookup_id);
+    if (!$is_own_profile && $current_user_id !== null) {
+        $isFollowingProfile = followers_is_following((string) $current_user_id, (string) $profile_lookup_id);
+        $followUiState = $isFollowingProfile ? 'aceito' : 'none';
+    }
 }
 
 if ($current_user_id !== null && $profile_lookup_id !== '') {
@@ -272,6 +283,50 @@ if (
 $myPostsForGrid = array_values(array_filter($myPosts, function ($p) {
     return isset($p['image_url']) && trim((string) $p['image_url']) !== '';
 }));
+
+$likesByPostId = [];
+if ($myPostsForGrid !== [] && feed_sk_available()) {
+    $pids = [];
+    foreach ($myPostsForGrid as $p) {
+        if (isset($p['id'])) {
+            $pids[] = (int) $p['id'];
+        }
+    }
+    if ($pids !== []) {
+        $likesByPostId = feed_get_likes_count_map($pids);
+    }
+}
+
+$pendingFollowProfiles = [];
+if ($pendingFollowRows !== [] && supabase_service_role_available()) {
+    $pidsF = [];
+    foreach ($pendingFollowRows as $pr) {
+        if (!empty($pr['follower_id'])) {
+            $pidsF[] = (string) $pr['follower_id'];
+        }
+    }
+    if ($pidsF !== []) {
+        $inList = implode(',', array_unique($pidsF));
+        $pfUrl = SUPABASE_URL . '/rest/v1/profiles?select=id,display_id,avatar_url&id=in.(' . $inList . ')';
+        $chPf = curl_init($pfUrl);
+        curl_setopt_array($chPf, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER => array_merge(supabase_service_rest_headers(false), ['Accept: application/json']),
+        ]);
+        $rawPf = curl_exec($chPf);
+        curl_close($chPf);
+        $decPf = json_decode((string) $rawPf, true);
+        if (is_array($decPf)) {
+            foreach ($decPf as $row) {
+                if (isset($row['id'])) {
+                    $pendingFollowProfiles[(string) $row['id']] = $row;
+                }
+            }
+        }
+    }
+}
 
 if ($access_token !== '' && $current_user_id !== null && $current_user_id !== '') {
     $role_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode((string) $current_user_id) . '&select=' . rawurlencode('role');
@@ -735,6 +790,9 @@ $igShowRel = trim($profileRelationship) !== '';
             position: relative;
             max-width: min(100vw - 32px, 900px);
             max-height: calc(100vh - 96px);
+            display: flex;
+            flex-direction: column;
+            align-items: stretch;
         }
         .post-modal-inner img {
             max-width: 100%;
@@ -901,20 +959,67 @@ $igShowRel = trim($profileRelationship) !== '';
         }
         #partner-age-wrap { display: none; }
         #partner-age-wrap.is-on { display: block; }
+        .ig-topbar{
+            position:sticky;top:0;z-index:120;display:flex;align-items:center;justify-content:space-between;
+            padding:10px 14px;background:#0A0A0A;border-bottom:1px solid #2a2a2a;min-height:48px;
+        }
+        .ig-topbar a{color:#AAAAAA;text-decoration:none;font-size:1.25rem;padding:4px}
+        .ig-topbar a:hover{color:#C9A84C}
+        .ig-topbar-sp{width:36px;flex-shrink:0}
+        .ig-gear-wrap{position:relative;display:inline-flex}
+        .ig-gear-badge{
+            position:absolute;top:-4px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;
+            background:#7B2EFF;color:#fff;font-size:0.65rem;font-weight:800;line-height:18px;text-align:center;
+            border:none;cursor:pointer;font-family:inherit;z-index:2;
+        }
+        .ig-gear-badge:focus-visible{outline:2px solid #C9A84C;outline-offset:2px}
+        .btn-follow-ig{
+            flex:1;min-width:0;text-align:center;padding:9px 14px;font-size:0.82rem;font-weight:700;border-radius:8px;
+            cursor:pointer;font-family:inherit;border:none;
+        }
+        .btn-follow-ig--segue{background:#7B2EFF;color:#fff}
+        .btn-follow-ig--seguindo{background:transparent;color:#7B2EFF;border:2px solid #7B2EFF}
+        .btn-follow-ig--pendente{background:#2a2a2a;color:#AAAAAA;border:1px solid #333}
+        .btn-msg-ig{
+            flex:1;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;
+            padding:9px 14px;font-size:0.82rem;font-weight:600;border-radius:8px;text-decoration:none;
+            background:#1a1a1a;border:1px solid #2a2a2a;color:#eee;
+        }
+        .btn-msg-ig:hover{border-color:#C9A84C;color:#C9A84C}
+        .ig-actions-row{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch;width:100%;max-width:420px}
+        .ig-dono{font-size:0.88rem;color:#C9A84C;margin:6px 0 4px;font-weight:600}
+        .follow-requests-modal{
+            display:none;position:fixed;inset:0;z-index:400;background:rgba(0,0,0,0.75);
+            align-items:center;justify-content:center;padding:20px;
+        }
+        .follow-requests-modal.is-open{display:flex}
+        .follow-requests-sheet{
+            background:#111;border:1px solid #2a2a2a;border-radius:14px;max-width:420px;width:100%;max-height:80vh;overflow:auto;padding:16px;
+        }
+        .follow-req-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid #222}
+        .follow-req-row:last-child{border-bottom:none}
+        .post-modal-cap{padding:12px 16px;color:#ddd;font-size:0.9rem;max-width:min(100vw - 32px, 900px)}
+        .post-modal-likes{font-size:0.82rem;color:#888;padding:0 16px 12px}
     </style>
 </head>
 <body>
-    <nav>
-        <a class="nav-brand" href="/features/feed/index.php">Club61</a>
-        <ul class="nav-links">
-            <li><a href="/features/feed/index.php">Feed</a></li>
-            <li><a href="/features/profile/index.php">Perfil</a></li>
-            <li><a href="/features/auth/logout.php">Logout</a></li>
-        </ul>
-    </nav>
+    <header class="ig-topbar">
+        <a href="/features/feed/index.php" aria-label="Voltar">←</a>
+        <span class="ig-topbar-sp" aria-hidden="true"></span>
+        <?php if ($is_own_profile): ?>
+        <div class="ig-gear-wrap">
+            <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações" id="igGearLink">⚙️</a>
+            <?php if ($pendingFollowCount > 0): ?>
+            <button type="button" class="ig-gear-badge" id="followReqBadgeBtn" aria-label="Pedidos para seguir"><?= (int) $pendingFollowCount ?></button>
+            <?php endif; ?>
+        </div>
+        <?php else: ?>
+        <span class="ig-topbar-sp"></span>
+        <?php endif; ?>
+    </header>
 
-    <div class="page">
-        <div class="auth-wrap">
+    <div class="page" style="padding-top:8px">
+        <div class="auth-wrap" style="max-width:520px">
             <?php if ($status === 'ok'): ?>
                 <div class="alert ok"><?php echo htmlspecialchars($message !== '' ? $message : 'Operação realizada.', ENT_QUOTES, 'UTF-8'); ?></div>
             <?php elseif ($status === 'error'): ?>
@@ -938,48 +1043,63 @@ $igShowRel = trim($profileRelationship) !== '';
                         <?php endif; ?>
                     </div>
                     <div class="ig-main-col">
-                        <div class="ig-title-row">
+                        <div class="ig-title-row" style="justify-content:flex-start">
                             <h2 class="ig-username"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></h2>
-                            <?php if ($is_own_profile): ?>
-                            <div class="ig-title-actions">
-                                <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
-                                <a href="/features/admin/index.php" class="btn-admin-link">⚙️ Painel Admin</a>
-                                <?php endif; ?>
-                                <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações">⚙️</a>
-                            </div>
-                            <?php endif; ?>
                         </div>
+                        <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
+                        <p class="ig-dono">Dono do Site</p>
+                        <?php endif; ?>
                         <div class="ig-actions">
                             <?php if ($is_own_profile): ?>
                             <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
                             <a class="btn-ig-story" href="/features/profile/upload_story.php"><i class="bi bi-camera" aria-hidden="true"></i> Enviar story</a>
+                            <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
+                            <a class="btn-admin-link" href="/features/admin/index.php" style="margin-top:8px;display:inline-block">Painel admin</a>
+                            <?php endif; ?>
                             <?php elseif (!$is_own_profile && $current_user_id !== null && $profile_lookup_id !== ''): ?>
+                            <div class="ig-actions-row">
+                            <?php if (club61_follows_service_ok()): ?>
+                                <?php
+                                $flabel = 'Seguir';
+                                $fclass = 'btn-follow-ig btn-follow-ig--segue';
+                                if ($followUiState === 'aceito') {
+                                    $flabel = 'Seguindo';
+                                    $fclass = 'btn-follow-ig btn-follow-ig--seguindo';
+                                } elseif ($followUiState === 'pendente') {
+                                    $flabel = 'Solicitado';
+                                    $fclass = 'btn-follow-ig btn-follow-ig--pendente';
+                                }
+                                ?>
+                            <button type="button" id="profile-follow-btn" class="<?= htmlspecialchars($fclass, ENT_QUOTES, 'UTF-8') ?>"
+                                data-following-id="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>"
+                                data-state="<?= htmlspecialchars($followUiState, ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars($flabel, ENT_QUOTES, 'UTF-8') ?>
+                            </button>
+                            <?php else: ?>
                             <button type="button" id="profile-follow-btn" class="btn btn-follow dark-btn js-follow-toggle<?= $isFollowingProfile ? ' is-following' : '' ?>"
                                 data-following-id="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>"
                                 data-following="<?= $isFollowingProfile ? '1' : '0' ?>"
                                 aria-pressed="<?= $isFollowingProfile ? 'true' : 'false' ?>">
                                 <?= $isFollowingProfile ? 'Seguindo' : 'Seguir' ?>
                             </button>
+                            <?php endif; ?>
                             <?php if ($mrBtn === 'accepted'): ?>
-                            <a class="btn-dm-icon" href="/features/chat/dm.php?to=<?= rawurlencode((string) $profile_lookup_id) ?>" title="Mensagem" aria-label="Mensagem privada">
-                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                                    <path d="M4 5h16a2 2 0 012 2v10a2 2 0 01-2 2H4l-4 3V7a2 2 0 012-2z" stroke="currentColor" stroke-width="1.75" stroke-linejoin="round"/>
-                                </svg>
-                            </a>
+                            <a class="btn-msg-ig" href="/features/messages/index.php?com=<?= rawurlencode((string) $profile_lookup_id) ?>">✉️ Mensagem</a>
                             <?php elseif ($mrBtn !== 'hidden'): ?>
                                 <?php if ($mrBtn === 'request'): ?>
-                                <form action="/features/profile/message_request.php" method="post" style="display:inline">
+                                <form action="/features/profile/message_request.php" method="post" style="flex:1;min-width:120px">
                                     <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="to_user" value="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="return_to" value="<?= htmlspecialchars('/features/profile/index.php?user=' . rawurlencode((string) $profile_lookup_id), ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-ig-msg">Pedir mensagem</button>
+                                    <button type="submit" class="btn-msg-ig" style="width:100%">Pedir mensagem</button>
                                 </form>
                                 <?php elseif ($mrBtn === 'pending_sent'): ?>
-                                <span class="btn-ig-msg btn-ig-msg--muted" title="Aguardando resposta">Pedido enviado</span>
+                                <span class="btn-msg-ig" style="opacity:0.7;cursor:default">Pedido enviado</span>
                                 <?php elseif ($mrBtn === 'pending_inbox'): ?>
-                                <a class="btn-ig-msg" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
+                                <a class="btn-msg-ig" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
                                 <?php endif; ?>
                             <?php endif; ?>
+                            </div>
                             <?php endif; ?>
                         </div>
                         <div class="ig-stats" aria-label="Estatísticas">
@@ -1019,26 +1139,28 @@ $igShowRel = trim($profileRelationship) !== '';
                         <?php endif; ?>
                     </div>
                 </div>
-                <p class="auth-sub">Identificador do membro neste espaço.</p>
-                <div class="profile-id"><?php echo htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8'); ?></div>
-                <?php if ($is_own_profile): ?>
-                <p style="text-align:center;margin-top:12px"><a class="btn-ig-edit" href="/features/profile/settings.php">Editar dados e localização em Configurações</a></p>
-                <?php endif; ?>
-
                 <div id="profile-network-stub" tabindex="-1" style="scroll-margin-top:72px"></div>
                 <div class="posts-section" id="profile-posts-grid">
                     <h2 class="section-head">Publicações</h2>
                     <?php if (empty($myPostsForGrid)): ?>
-                        <p class="posts-empty">Nenhuma publicação ainda.</p>
+                        <p class="posts-empty" style="display:flex;flex-direction:column;align-items:center;gap:10px;padding:28px 12px">
+                            <span style="font-size:2rem" aria-hidden="true">📷</span>
+                            <span>Sem publicações ainda</span>
+                        </p>
                     <?php else: ?>
                         <div class="posts-grid">
                             <?php foreach ($myPostsForGrid as $gp): ?>
                                 <?php
-
                                 $gimg = trim((string) $gp['image_url']);
+                                $gcap = isset($gp['caption']) ? (string) $gp['caption'] : '';
+                                $gid = isset($gp['id']) ? (int) $gp['id'] : 0;
+                                $glk = $gid > 0 ? (int) ($likesByPostId[(string) $gid] ?? 0) : 0;
                                 ?>
-                            <button type="button" class="posts-grid-cell" data-src="<?php echo htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8'); ?>" aria-label="Ampliar publicação">
-                                <img src="<?php echo htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8'); ?>" alt="">
+                            <button type="button" class="posts-grid-cell" data-src="<?= htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8') ?>"
+                                data-caption="<?= htmlspecialchars($gcap, ENT_QUOTES, 'UTF-8') ?>"
+                                data-likes="<?= (int) $glk ?>"
+                                aria-label="Ampliar publicação">
+                                <img src="<?= htmlspecialchars($gimg, ENT_QUOTES, 'UTF-8') ?>" alt="">
                             </button>
                             <?php endforeach; ?>
                         </div>
@@ -1078,17 +1200,75 @@ $igShowRel = trim($profileRelationship) !== '';
 
     <div id="postModal" class="post-modal" role="dialog" aria-modal="true" aria-label="Publicação ampliada" hidden>
         <button type="button" class="post-modal-close" aria-label="Fechar">&times;</button>
-        <img id="postModalImg" src="" alt="">
+        <div class="post-modal-inner">
+            <img id="postModalImg" src="" alt="">
+            <div id="postModalCap" class="post-modal-cap" style="display:none"></div>
+            <div id="postModalLikes" class="post-modal-likes" style="display:none"></div>
+        </div>
     </div>
+
+    <?php if ($is_own_profile && $pendingFollowCount > 0 && $pendingFollowRows !== []): ?>
+    <div id="followReqModal" class="follow-requests-modal" aria-hidden="true">
+        <div class="follow-requests-sheet">
+            <h3 style="color:#C9A84C;font-size:1rem;margin-bottom:12px">Pedidos para seguir</h3>
+            <?php foreach ($pendingFollowRows as $pr):
+                $fid = (string) ($pr['follower_id'] ?? '');
+                if ($fid === '') {
+                    continue;
+                }
+                $fp = $pendingFollowProfiles[$fid] ?? [];
+                $flab = $fp !== [] ? club61_display_id_label(isset($fp['display_id']) ? (string) $fp['display_id'] : null) : 'Membro';
+                $fav = isset($fp['avatar_url']) ? trim((string) $fp['avatar_url']) : '';
+                ?>
+            <div class="follow-req-row" data-follower-id="<?= htmlspecialchars($fid, ENT_QUOTES, 'UTF-8') ?>">
+                <span style="font-weight:600;color:#fff"><?= htmlspecialchars($flab, ENT_QUOTES, 'UTF-8') ?></span>
+                <span>
+                    <button type="button" class="btn-ig-edit follow-accept" style="display:inline-block;width:auto;padding:6px 12px;margin-right:6px">Aceitar</button>
+                    <button type="button" class="btn-cancel follow-reject" style="display:inline-block;width:auto;padding:6px 12px">Recusar</button>
+                </span>
+            </div>
+            <?php endforeach; ?>
+            <button type="button" class="btn-cancel" style="width:100%;margin-top:12px" id="closeFollowReq">Fechar</button>
+        </div>
+    </div>
+    <?php endif; ?>
     <script>
     (function () {
         var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        var USE_FOLLOWS = <?= club61_follows_service_ok() ? 'true' : 'false' ?>;
+        var FOLLOW_API = '/features/follow/follow_api.php';
         var followBtn = document.getElementById('profile-follow-btn');
         var followersEl = document.getElementById('profile-followers-count');
         if (followBtn) {
             followBtn.addEventListener('click', function () {
                 var fid = followBtn.getAttribute('data-following-id');
                 if (!fid) return;
+                var st = followBtn.getAttribute('data-state') || '';
+                if (USE_FOLLOWS) {
+                    if (st === 'pendente' || st === 'aceito') return;
+                    followBtn.disabled = true;
+                    fetch(FOLLOW_API + '?r=enviar', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        credentials: 'same-origin',
+                        body: JSON.stringify({ following_id: fid, csrf: PROFILE_CSRF })
+                    })
+                        .then(function (r) { return r.json(); })
+                        .then(function (d) {
+                            if (!d || !d.success) return;
+                            followBtn.setAttribute('data-state', d.state || 'pendente');
+                            followBtn.textContent = (d.state === 'aceito') ? 'Seguindo' : 'Solicitado';
+                            followBtn.className = (d.state === 'aceito')
+                                ? 'btn-follow-ig btn-follow-ig--seguindo'
+                                : 'btn-follow-ig btn-follow-ig--pendente';
+                            if (followersEl && typeof d.followers_count === 'number') {
+                                followersEl.textContent = String(d.followers_count);
+                            }
+                        })
+                        .catch(function () {})
+                        .finally(function () { followBtn.disabled = false; });
+                    return;
+                }
                 followBtn.disabled = true;
                 var fd = new FormData();
                 fd.append('following_id', fid);
@@ -1112,11 +1292,113 @@ $igShowRel = trim($profileRelationship) !== '';
                     .finally(function () { followBtn.disabled = false; });
             });
         }
+        var frModal = document.getElementById('followReqModal');
+        var followReqBadgeBtn = document.getElementById('followReqBadgeBtn');
+        if (followReqBadgeBtn && frModal) {
+            followReqBadgeBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                frModal.classList.add('is-open');
+                frModal.setAttribute('aria-hidden', 'false');
+            });
+        }
+        var closeFr = document.getElementById('closeFollowReq');
+        if (closeFr && frModal) {
+            closeFr.addEventListener('click', function () {
+                frModal.classList.remove('is-open');
+                frModal.setAttribute('aria-hidden', 'true');
+            });
+        }
+        if (frModal) {
+            frModal.addEventListener('click', function (e) {
+                if (e.target === frModal) {
+                    frModal.classList.remove('is-open');
+                    frModal.setAttribute('aria-hidden', 'true');
+                }
+            });
+        }
+        function updateFollowReqBadge(n) {
+            var b = document.getElementById('followReqBadgeBtn');
+            if (!b) return;
+            if (n <= 0) {
+                b.style.display = 'none';
+                if (frModal) {
+                    frModal.classList.remove('is-open');
+                    frModal.setAttribute('aria-hidden', 'true');
+                }
+            } else {
+                b.style.display = '';
+                b.textContent = String(n);
+            }
+        }
+        document.querySelectorAll('.follow-accept').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var row = btn.closest('.follow-req-row');
+                var id = row ? row.getAttribute('data-follower-id') : '';
+                if (!id) return;
+                fetch(FOLLOW_API + '?r=aceitar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ follower_id: id, csrf: PROFILE_CSRF })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d || !d.success) return;
+                        if (row) row.remove();
+                        if (followersEl && typeof d.followers_count === 'number') {
+                            followersEl.textContent = String(d.followers_count);
+                        }
+                        var n = d.pending_count != null ? parseInt(d.pending_count, 10) : 0;
+                        updateFollowReqBadge(n);
+                    });
+            });
+        });
+        document.querySelectorAll('.follow-reject').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var row = btn.closest('.follow-req-row');
+                var id = row ? row.getAttribute('data-follower-id') : '';
+                if (!id) return;
+                fetch(FOLLOW_API + '?r=recusar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ follower_id: id, csrf: PROFILE_CSRF })
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (!d || !d.success) return;
+                        if (row) row.remove();
+                        var n = d.pending_count != null ? parseInt(d.pending_count, 10) : 0;
+                        updateFollowReqBadge(n);
+                    });
+            });
+        });
         var modal = document.getElementById('postModal');
         var modalImg = document.getElementById('postModalImg');
+        var modalCap = document.getElementById('postModalCap');
+        var modalLikes = document.getElementById('postModalLikes');
         if (!modal || !modalImg) return;
-        function openModal(src) {
+        function openModal(src, cap, likes) {
             modalImg.src = src;
+            if (modalCap) {
+                if (cap) {
+                    modalCap.style.display = 'block';
+                    modalCap.textContent = cap;
+                } else {
+                    modalCap.style.display = 'none';
+                    modalCap.textContent = '';
+                }
+            }
+            if (modalLikes) {
+                if (likes > 0) {
+                    modalLikes.style.display = 'block';
+                    modalLikes.textContent = '♥ ' + likes + ' curtidas';
+                } else {
+                    modalLikes.style.display = 'none';
+                    modalLikes.textContent = '';
+                }
+            }
             modal.removeAttribute('hidden');
             modal.classList.add('is-open');
             document.body.style.overflow = 'hidden';
@@ -1130,7 +1412,9 @@ $igShowRel = trim($profileRelationship) !== '';
         document.querySelectorAll('.posts-grid-cell').forEach(function (btn) {
             btn.addEventListener('click', function () {
                 var src = btn.getAttribute('data-src');
-                if (src) openModal(src);
+                var cap = btn.getAttribute('data-caption') || '';
+                var likes = parseInt(btn.getAttribute('data-likes') || '0', 10) || 0;
+                if (src) openModal(src, cap, likes);
             });
         });
         var closeBtn = modal.querySelector('.post-modal-close');

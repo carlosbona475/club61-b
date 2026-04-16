@@ -8,16 +8,19 @@ require_once CLUB61_ROOT . '/config/city_rooms.php';
 require_once __DIR__ . '/chat_backend.php';
 
 /**
- * Resolve /chat/messages, /chat/send, … ou ?r=messages (sem mod_rewrite).
+ * Resolve /chat/messages, /chat/send, /chat/enviar, … ou ?r=messages (sem mod_rewrite).
  */
 function club61_chat_api_route(): string
 {
     $uri = $_SERVER['REQUEST_URI'] ?? '';
     $path = parse_url($uri, PHP_URL_PATH) ?: '';
-    if (preg_match('#/chat/(messages|send|react|online|presence)/?$#', $path, $m)) {
-        return $m[1];
+    if (preg_match('#/chat/(messages|send|enviar|react|online|presence)/?$#', $path, $m)) {
+        return $m[1] === 'enviar' ? 'send' : $m[1];
     }
     $r = trim((string) ($_GET['r'] ?? ''));
+    if ($r === 'enviar') {
+        return 'send';
+    }
 
     return $r;
 }
@@ -27,6 +30,9 @@ function club61_chat_json_response(int $status, array $data): void
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
+    if (array_key_exists('ok', $data) && !array_key_exists('success', $data)) {
+        $data['success'] = (bool) ($data['ok'] === true);
+    }
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
 }
@@ -34,8 +40,16 @@ function club61_chat_json_response(int $status, array $data): void
 $route = club61_chat_api_route();
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 
-if ($route === '' || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
-    club61_chat_json_response(404, ['ok' => false, 'error' => 'not_found']);
+if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
+    club61_chat_json_response(503, [
+        'ok' => false,
+        'error' => 'service_unavailable',
+        'message' => 'SUPABASE_SERVICE_KEY não configurada no servidor.',
+    ]);
+}
+
+if ($route === '') {
+    club61_chat_json_response(404, ['ok' => false, 'error' => 'not_found', 'message' => 'Rota de chat inválida. Use ?r=send ou /chat/send.']);
 }
 
 $uid = trim((string) ($_SESSION['user_id'] ?? ''));
@@ -134,10 +148,30 @@ if ($route === 'send' && $method === 'POST') {
             $file = $_FILES['media'];
             $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4', 'video/webm'];
             $extMap = ['image/jpeg' => 'jpg', 'image/png' => 'png', 'image/webp' => 'webp', 'image/gif' => 'gif', 'video/mp4' => 'mp4', 'video/webm' => 'webm'];
-            $mime = mime_content_type($file['tmp_name']);
-            if (in_array($mime, $allowed, true) && $file['size'] <= 20 * 1024 * 1024) {
+            $mime = '';
+            $tmp = (string) ($file['tmp_name'] ?? '');
+            if ($tmp !== '' && is_uploaded_file($tmp)) {
+                if (function_exists('finfo_open')) {
+                    $fi = finfo_open(FILEINFO_MIME_TYPE);
+                    if ($fi !== false) {
+                        $mime = (string) finfo_file($fi, $tmp);
+                        finfo_close($fi);
+                    }
+                }
+                if ($mime === '' && function_exists('mime_content_type')) {
+                    try {
+                        $mime = (string) mime_content_type($tmp);
+                    } catch (Exception $e) {
+                        $mime = '';
+                    }
+                }
+                if ($mime === '') {
+                    $mime = trim((string) ($file['type'] ?? ''));
+                }
+            }
+            if ($mime !== '' && in_array($mime, $allowed, true) && (int) ($file['size'] ?? 0) <= 20 * 1024 * 1024) {
                 $filename = uniqid('ch_', true) . '.' . ($extMap[$mime] ?? 'bin');
-                $binary = file_get_contents($file['tmp_name']);
+                $binary = file_get_contents($tmp);
                 if ($binary !== false) {
                     $up = club61_chat_upload_media($binary, $mime, $filename);
                     if ($up !== null) {
@@ -156,19 +190,36 @@ if ($route === 'send' && $method === 'POST') {
         }
     }
 
+    if ($salaId === '') {
+        $salaId = trim((string) ($_POST['sala_id'] ?? ''));
+    }
+    if ($content === '') {
+        $content = trim((string) ($_POST['mensagem'] ?? $_POST['message'] ?? $_POST['content'] ?? ''));
+    }
+
     if (club61_city_room_by_slug($salaId) === null) {
-        club61_chat_json_response(400, ['ok' => false, 'error' => 'sala']);
+        club61_chat_json_response(400, [
+            'ok' => false,
+            'error' => 'sala',
+            'message' => 'Sala inválida ou sala_id ausente.',
+        ]);
     }
     if ($content === '' && $mediaUrl === null) {
-        club61_chat_json_response(400, ['ok' => false, 'error' => 'empty']);
+        club61_chat_json_response(400, ['ok' => false, 'error' => 'empty', 'message' => 'Mensagem vazia.']);
     }
     if (strlen($content) > 1000) {
-        club61_chat_json_response(400, ['ok' => false, 'error' => 'length']);
+        club61_chat_json_response(400, ['ok' => false, 'error' => 'length', 'message' => 'Texto acima de 1000 caracteres.']);
     }
 
     $ins = club61_chat_insert_message($salaId, $uid, $content, $tipo, $mediaUrl);
     if (!$ins['ok']) {
-        club61_chat_json_response(500, ['ok' => false, 'error' => $ins['error'] ?? 'send']);
+        club61_chat_json_response(500, [
+            'ok' => false,
+            'error' => $ins['error'] ?? 'send',
+            'message' => $ins['detail'] ?? 'Falha ao gravar mensagem.',
+            'detail' => $ins['detail'] ?? null,
+            'http_code' => $ins['http_code'] ?? null,
+        ]);
     }
 
     $lastIso = null;

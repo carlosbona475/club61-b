@@ -11,6 +11,7 @@ require_once CLUB61_ROOT . '/config/profile_helper.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
 require_once CLUB61_ROOT . '/config/online.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
+require_once CLUB61_ROOT . '/config/direct_messages_helper.php';
 
 $onlineUsers = [];
 
@@ -62,6 +63,7 @@ $commentsByPost = [];
 
 $access_token = (string) ($_SESSION['access_token'] ?? '');
 $current_user_id = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
+$dmUnread = ($current_user_id !== '') ? club61_dm_unread_count($current_user_id) : 0;
 $feedPerPage = 10;
 $feedPage = max(1, (int) ($_GET['page'] ?? 1));
 $feedOffset = ($feedPage - 1) * $feedPerPage;

@@ -36,10 +36,12 @@ require_once CLUB61_ROOT . '/config/message_requests.php';
 require_once CLUB61_ROOT . '/config/followers.php';
 require_once CLUB61_ROOT . '/config/follows_status.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/direct_messages_helper.php';
 
 $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
 $message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 $current_user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
+$dmUnread = ($current_user_id !== null && (string) $current_user_id !== '') ? club61_dm_unread_count((string) $current_user_id) : 0;
 $profile_user_id = isset($_GET['user']) && $_GET['user'] !== '' ? $_GET['user'] : $current_user_id;
 
 if ($profile_user_id === null || $profile_user_id === '') {
@@ -965,12 +967,28 @@ $igShowRel = trim($profileRelationship) !== '';
         #partner-age-wrap { display: none; }
         #partner-age-wrap.is-on { display: block; }
         .ig-topbar{
-            position:sticky;top:0;z-index:120;display:flex;align-items:center;justify-content:space-between;
-            padding:10px 14px;background:#0A0A0A;border-bottom:1px solid #2a2a2a;min-height:48px;
+            position:sticky;top:0;z-index:120;display:flex;align-items:center;gap:8px;
+            padding:10px 12px;background:#0A0A0A;border-bottom:1px solid #2a2a2a;min-height:48px;
         }
-        .ig-topbar a{color:#AAAAAA;text-decoration:none;font-size:1.25rem;padding:4px}
-        .ig-topbar a:hover{color:#C9A84C}
-        .ig-topbar-sp{width:36px;flex-shrink:0}
+        .ig-topbar-back{color:#AAAAAA;text-decoration:none;font-size:1.25rem;padding:4px;flex-shrink:0;line-height:1}
+        .ig-topbar-back:hover{color:#C9A84C}
+        .ig-topbar-title{
+            flex:1;min-width:0;text-align:center;font-weight:700;font-size:0.98rem;color:#fff;
+            letter-spacing:0.02em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px;
+        }
+        .ig-topbar-end{display:flex;align-items:center;gap:10px;flex-shrink:0;margin-left:auto}
+        .ig-topbar-dm{
+            position:relative;display:inline-flex;align-items:center;justify-content:center;
+            width:40px;height:36px;border-radius:10px;border:1px solid #333;background:#161616;color:#e8e8e8;
+            text-decoration:none;transition:border-color .15s ease,color .15s ease;
+        }
+        .ig-topbar-dm:hover{border-color:#C9A84C;color:#C9A84C}
+        .ig-topbar-dm-ico{font-size:1.15rem;line-height:1}
+        .ig-dm-badge{
+            position:absolute;top:-5px;right:-5px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+            background:#7B2EFF;color:#fff;font-size:0.62rem;font-weight:800;line-height:18px;text-align:center;
+            border:2px solid #0A0A0A;
+        }
         .ig-gear-wrap{position:relative;display:inline-flex}
         .ig-gear-badge{
             position:absolute;top:-4px;right:-6px;min-width:18px;height:18px;padding:0 4px;border-radius:999px;
@@ -978,6 +996,15 @@ $igShowRel = trim($profileRelationship) !== '';
             border:none;cursor:pointer;font-family:inherit;z-index:2;
         }
         .ig-gear-badge:focus-visible{outline:2px solid #C9A84C;outline-offset:2px}
+        .ig-follow-pending-card{
+            margin:14px 0 18px;padding:14px 14px 10px;background:#121212;border:1px solid #2a2a2a;border-radius:14px;
+        }
+        .ig-follow-pending-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+        .ig-follow-pending-head strong{color:#C9A84C;font-size:0.88rem;font-weight:700}
+        .ig-follow-pending-count{
+            font-size:0.72rem;font-weight:800;color:#fff;background:#7B2EFF;min-width:22px;text-align:center;
+            padding:2px 8px;border-radius:999px;
+        }
         .btn-follow-ig{
             flex:1;min-width:0;text-align:center;padding:9px 14px;font-size:0.82rem;font-weight:700;border-radius:8px;
             cursor:pointer;font-family:inherit;border:none;
@@ -1021,18 +1048,24 @@ $igShowRel = trim($profileRelationship) !== '';
 </head>
 <body>
     <header class="ig-topbar">
-        <a href="/features/feed/index.php" aria-label="Voltar">←</a>
-        <span class="ig-topbar-sp" aria-hidden="true"></span>
-        <?php if ($is_own_profile): ?>
-        <div class="ig-gear-wrap">
-            <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações" id="igGearLink">⚙️</a>
-            <?php if ($pendingFollowCount > 0): ?>
-            <button type="button" class="ig-gear-badge" id="followReqBadgeBtn" aria-label="Pedidos para seguir"><?= (int) $pendingFollowCount ?></button>
+        <a class="ig-topbar-back" href="/features/feed/index.php" aria-label="Voltar">←</a>
+        <div class="ig-topbar-title"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></div>
+        <div class="ig-topbar-end">
+            <a class="ig-topbar-dm" href="/mensagens" aria-label="Mensagens diretas">
+                <span class="ig-topbar-dm-ico" aria-hidden="true">✉️</span>
+                <?php if ($dmUnread > 0): ?>
+                <span class="ig-dm-badge"><?= ((int) $dmUnread) > 99 ? '99+' : (string) (int) $dmUnread ?></span>
+                <?php endif; ?>
+            </a>
+            <?php if ($is_own_profile): ?>
+            <div class="ig-gear-wrap">
+                <a class="ig-gear" href="/features/profile/settings.php" title="Configurações" aria-label="Configurações" id="igGearLink">⚙️</a>
+                <?php if ($pendingFollowCount > 0): ?>
+                <button type="button" class="ig-gear-badge" id="followReqBadgeBtn" aria-label="Ir aos pedidos para seguir"><?= (int) $pendingFollowCount ?></button>
+                <?php endif; ?>
+            </div>
             <?php endif; ?>
         </div>
-        <?php else: ?>
-        <span class="ig-topbar-sp"></span>
-        <?php endif; ?>
     </header>
 
     <div class="page" style="padding-top:8px">
@@ -1044,7 +1077,7 @@ $igShowRel = trim($profileRelationship) !== '';
             <?php endif; ?>
 
             <div class="auth-card">
-                <h1 class="auth-brand">Perfil</h1>
+                <h1 class="auth-brand" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">Perfil</h1>
                 <div class="ig-header">
                     <div class="ig-avatar-col">
                         <?php if ($is_own_profile): ?>
@@ -1070,6 +1103,7 @@ $igShowRel = trim($profileRelationship) !== '';
                             <?php if ($is_own_profile): ?>
                             <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
                             <a class="btn-ig-story" href="/features/profile/upload_story.php"><i class="bi bi-camera" aria-hidden="true"></i> Enviar story</a>
+                            <a class="btn-ig-story" href="/features/chat/salas.php">💬 Salas de chat</a>
                             <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
                             <a class="btn-admin-link" href="/features/admin/index.php" style="margin-top:8px;display:inline-block">Painel admin</a>
                             <?php endif; ?>
@@ -1119,6 +1153,30 @@ $igShowRel = trim($profileRelationship) !== '';
                             </div>
                             <?php endif; ?>
                         </div>
+                        <?php if ($is_own_profile && $pendingFollowCount > 0 && $pendingFollowRows !== []): ?>
+                        <div id="ig-follow-pending-wrap" class="ig-follow-pending-card">
+                            <div class="ig-follow-pending-head">
+                                <strong id="ig-follow-pending">Pedidos para seguir</strong>
+                                <span class="ig-follow-pending-count" id="ig-follow-pending-count"><?= (int) $pendingFollowCount ?></span>
+                            </div>
+                            <?php foreach ($pendingFollowRows as $pr):
+                                $fid = (string) ($pr['follower_id'] ?? '');
+                                if ($fid === '') {
+                                    continue;
+                                }
+                                $fp = $pendingFollowProfiles[$fid] ?? [];
+                                $flab = $fp !== [] ? club61_display_id_label(isset($fp['display_id']) ? (string) $fp['display_id'] : null) : 'Membro';
+                                ?>
+                            <div class="follow-req-row" data-follower-id="<?= htmlspecialchars($fid, ENT_QUOTES, 'UTF-8') ?>">
+                                <span style="font-weight:600;color:#fff"><?= htmlspecialchars($flab, ENT_QUOTES, 'UTF-8') ?></span>
+                                <span>
+                                    <button type="button" class="btn-ig-edit follow-accept" style="display:inline-block;width:auto;padding:6px 12px;margin-right:6px">Aceitar</button>
+                                    <button type="button" class="btn-cancel follow-reject" style="display:inline-block;width:auto;padding:6px 12px">Recusar</button>
+                                </span>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <?php endif; ?>
                         <div class="ig-stats" aria-label="Estatísticas">
                             <a class="ig-stat-link" href="#profile-posts-grid">
                             <div class="ig-stat">
@@ -1224,31 +1282,6 @@ $igShowRel = trim($profileRelationship) !== '';
         </div>
     </div>
 
-    <?php if ($is_own_profile && $pendingFollowCount > 0 && $pendingFollowRows !== []): ?>
-    <div id="followReqModal" class="follow-requests-modal" aria-hidden="true">
-        <div class="follow-requests-sheet">
-            <h3 style="color:#C9A84C;font-size:1rem;margin-bottom:12px">Pedidos para seguir</h3>
-            <?php foreach ($pendingFollowRows as $pr):
-                $fid = (string) ($pr['follower_id'] ?? '');
-                if ($fid === '') {
-                    continue;
-                }
-                $fp = $pendingFollowProfiles[$fid] ?? [];
-                $flab = $fp !== [] ? club61_display_id_label(isset($fp['display_id']) ? (string) $fp['display_id'] : null) : 'Membro';
-                $fav = isset($fp['avatar_url']) ? trim((string) $fp['avatar_url']) : '';
-                ?>
-            <div class="follow-req-row" data-follower-id="<?= htmlspecialchars($fid, ENT_QUOTES, 'UTF-8') ?>">
-                <span style="font-weight:600;color:#fff"><?= htmlspecialchars($flab, ENT_QUOTES, 'UTF-8') ?></span>
-                <span>
-                    <button type="button" class="btn-ig-edit follow-accept" style="display:inline-block;width:auto;padding:6px 12px;margin-right:6px">Aceitar</button>
-                    <button type="button" class="btn-cancel follow-reject" style="display:inline-block;width:auto;padding:6px 12px">Recusar</button>
-                </span>
-            </div>
-            <?php endforeach; ?>
-            <button type="button" class="btn-cancel" style="width:100%;margin-top:12px" id="closeFollowReq">Fechar</button>
-        </div>
-    </div>
-    <?php endif; ?>
     <script>
     (function () {
         var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
@@ -1359,43 +1392,33 @@ $igShowRel = trim($profileRelationship) !== '';
                     .finally(function () { followBtn.disabled = false; });
             });
         }
-        var frModal = document.getElementById('followReqModal');
         var followReqBadgeBtn = document.getElementById('followReqBadgeBtn');
-        if (followReqBadgeBtn && frModal) {
+        var pendingWrap = document.getElementById('ig-follow-pending-wrap');
+        var pendingCountEl = document.getElementById('ig-follow-pending-count');
+        if (followReqBadgeBtn) {
             followReqBadgeBtn.addEventListener('click', function (e) {
                 e.preventDefault();
-                e.stopPropagation();
-                frModal.classList.add('is-open');
-                frModal.setAttribute('aria-hidden', 'false');
-            });
-        }
-        var closeFr = document.getElementById('closeFollowReq');
-        if (closeFr && frModal) {
-            closeFr.addEventListener('click', function () {
-                frModal.classList.remove('is-open');
-                frModal.setAttribute('aria-hidden', 'true');
-            });
-        }
-        if (frModal) {
-            frModal.addEventListener('click', function (e) {
-                if (e.target === frModal) {
-                    frModal.classList.remove('is-open');
-                    frModal.setAttribute('aria-hidden', 'true');
+                var el = document.getElementById('ig-follow-pending');
+                if (el) {
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             });
         }
         function updateFollowReqBadge(n) {
             var b = document.getElementById('followReqBadgeBtn');
-            if (!b) return;
-            if (n <= 0) {
-                b.style.display = 'none';
-                if (frModal) {
-                    frModal.classList.remove('is-open');
-                    frModal.setAttribute('aria-hidden', 'true');
+            if (b) {
+                if (n <= 0) {
+                    b.style.display = 'none';
+                } else {
+                    b.style.display = '';
+                    b.textContent = String(n);
                 }
-            } else {
-                b.style.display = '';
-                b.textContent = String(n);
+            }
+            if (pendingCountEl) {
+                pendingCountEl.textContent = n > 0 ? String(n) : '0';
+            }
+            if (pendingWrap && n <= 0) {
+                pendingWrap.style.display = 'none';
             }
         }
         document.querySelectorAll('.follow-accept').forEach(function (btn) {

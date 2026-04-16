@@ -208,6 +208,7 @@ $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
     <button type="button" class="btn-delete-post" data-post-id="<?= (int) $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
     <?php endif; ?>
   </div>
+  <?php if (!empty($post['caption'])): ?><div class="post-caption-block"><span class="cap-user"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars((string) $post['caption'], ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
   <?php if (!empty($post['image_url'])): ?><div class="post-img-wrap"><img class="post-img" src="<?= htmlspecialchars((string) $post['image_url'], ENT_QUOTES, 'UTF-8') ?>" alt=""></div><?php endif; ?>
   <div class="post-actions-row"><button type="button" class="like-btn<?= $isLiked ? ' is-liked' : '' ?>" data-like-btn data-post-id="<?= (int) $pid ?>" aria-pressed="<?= $isLiked ? 'true' : 'false' ?>" aria-label="<?= $isLiked ? 'Descurtir' : 'Curtir' ?>"><?= $isLiked ? '♥' : '♡' ?></button><span class="like-count" data-like-count><?= (int) $likeTotal ?></span></div>
   <div class="post-comments" data-comment-list data-post-id="<?= (int) $pid ?>">
@@ -217,10 +218,9 @@ $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
     <?php endforeach; ?>
   </div>
   <a class="post-comments-more" href="/features/feed/post_comments.php?post_id=<?= (int) $pid ?>">Ver todos os comentários</a>
-  <form class="comment-bar" data-comment-form data-post-id="<?= (int) $pid ?>" action="#" method="post" onsubmit="return false;">
+  <form class="comment-bar" data-comment-form data-post-id="<?= (int) $pid ?>" action="#" method="post">
     <input type="text" name="comment" maxlength="2000" placeholder="Adicione um comentário..." autocomplete="off" aria-label="Comentário"><button type="submit">Enviar</button>
   </form>
-  <?php if (!empty($post['caption'])): ?><div class="post-caption-block"><span class="cap-user"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars((string) $post['caption'], ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
 </article>
 <?php endforeach; ?>
 <?php if ($posts !== [] && $feedHasOlder): ?><div class="feed-pager"><a href="<?= htmlspecialchars($feedOlderUrl, ENT_QUOTES, 'UTF-8') ?>">Carregar publicações mais antigas</a></div><?php endif; ?>

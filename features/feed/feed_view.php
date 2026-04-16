@@ -336,6 +336,11 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
         <button type="button" class="btn-delete-post" data-post-id="<?= (int) $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
         <?php endif; ?>
       </div>
+      <?php if (!empty($post['caption'])): ?>
+      <div class="post-caption-block">
+        <span class="cap-user"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars($post['caption'], ENT_QUOTES, 'UTF-8') ?>
+      </div>
+      <?php endif; ?>
       <?php if (!empty($post['image_url'])): ?>
       <div class="post-img-wrap">
         <img class="post-img" src="<?= htmlspecialchars($post['image_url'], ENT_QUOTES, 'UTF-8') ?>" alt="">
@@ -361,15 +366,10 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
         <?php endforeach; ?>
       </div>
       <a class="post-comments-more" href="/features/feed/post_comments.php?post_id=<?= (int) $pid ?>">Ver todos os comentários</a>
-      <form class="comment-bar" data-comment-form data-post-id="<?= (int) $pid ?>" action="#" method="post" onsubmit="return false;">
+      <form class="comment-bar" data-comment-form data-post-id="<?= (int) $pid ?>" action="#" method="post">
         <input type="text" name="comment" maxlength="2000" placeholder="Adicione um comentário..." autocomplete="off" aria-label="Comentário">
         <button type="submit">Enviar</button>
       </form>
-      <?php if (!empty($post['caption'])): ?>
-      <div class="post-caption-block">
-        <span class="cap-user"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars($post['caption'], ENT_QUOTES, 'UTF-8') ?>
-      </div>
-      <?php endif; ?>
     </article>
     <?php endforeach; ?>
   <?php endif; ?>

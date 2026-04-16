@@ -83,7 +83,91 @@ function dm_date_divider(string $dayKey): string
     }
 }
 
+function dm_typing_store_path(): string
+{
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'club61_dm_typing.json';
+}
+
+/**
+ * @return array<string, array<string, int>>
+ */
+function dm_typing_read(): array
+{
+    $path = dm_typing_store_path();
+    if (!is_file($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if (!is_string($raw) || $raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * @param array<string, array<string, int>> $store
+ */
+function dm_typing_write(array $store): void
+{
+    @file_put_contents(dm_typing_store_path(), json_encode($store, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+function dm_typing_key(string $a, string $b): string
+{
+    $pair = [$a, $b];
+    sort($pair, SORT_STRING);
+    return implode('|', $pair);
+}
+
+function dm_typing_touch(string $me, string $other, int $ttl = 4): void
+{
+    $key = dm_typing_key($me, $other);
+    $store = dm_typing_read();
+    if (!isset($store[$key]) || !is_array($store[$key])) {
+        $store[$key] = [];
+    }
+    $now = time();
+    $store[$key][$me] = $now + max(1, $ttl);
+    foreach ($store as $k => $users) {
+        if (!is_array($users)) {
+            unset($store[$k]);
+            continue;
+        }
+        foreach ($users as $uid => $exp) {
+            if ((int) $exp <= $now) {
+                unset($store[$k][$uid]);
+            }
+        }
+        if ($store[$k] === []) {
+            unset($store[$k]);
+        }
+    }
+    dm_typing_write($store);
+}
+
+function dm_other_is_typing(string $me, string $other): bool
+{
+    $key = dm_typing_key($me, $other);
+    $store = dm_typing_read();
+    $exp = isset($store[$key][$other]) ? (int) $store[$key][$other] : 0;
+    return $exp > time();
+}
+
+if (isset($_GET['typing'])) {
+    header('Content-Type: application/json; charset=utf-8');
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        dm_typing_touch($current_user_id, $other_id, 4);
+        echo json_encode(['ok' => true], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
+    }
+    echo json_encode(['ok' => true, 'typing' => dm_other_is_typing($current_user_id, $other_id)], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $isAjax = (isset($_POST['ajax']) && (string) $_POST['ajax'] === '1')
+        || strtolower((string) ($_SERVER['HTTP_X_REQUESTED_WITH'] ?? '')) === 'xmlhttprequest';
     $content  = trim($_POST['content'] ?? '');
     $media_url  = null;
     $media_type = null;
@@ -143,11 +227,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'apikey: '         . $sk,
                 'Authorization: Bearer ' . $sk,
                 'Content-Type: application/json',
-                'Prefer: return=minimal',
+                'Prefer: return=representation',
             ],
         ]);
-        curl_exec($ch);
+        $insRaw = curl_exec($ch);
+        $insCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
         curl_close($ch);
+        if ($isAjax) {
+            $row = null;
+            if ($insRaw !== false && $insCode >= 200 && $insCode < 300) {
+                $decoded = json_decode((string) $insRaw, true);
+                if (is_array($decoded) && isset($decoded[0]) && is_array($decoded[0])) {
+                    $row = $decoded[0];
+                }
+            }
+            header('Content-Type: application/json; charset=utf-8');
+            if ($row === null) {
+                http_response_code(500);
+                echo json_encode(['ok' => false, 'message' => 'Falha ao enviar.'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                exit;
+            }
+            echo json_encode(['ok' => true, 'message' => $row], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
+        }
+    }
+    if ($isAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'message' => 'Mensagem vazia.'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        exit;
     }
     header('Location: /features/chat/dm.php?with=' . rawurlencode($other_id));
     exit;
@@ -307,7 +415,7 @@ foreach ($messages as $m):
     endif;
     $txt = isset($m['content']) ? (string) $m['content'] : '';
     ?>
-  <div class="msg-row <?= $isMe ? 'me' : 'them' ?>">
+  <div class="msg-row <?= $isMe ? 'me' : 'them' ?>" data-msg-id="<?= htmlspecialchars((string) ($m['id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
     <div class="msg-bub <?= $isMe ? 'me' : 'them' ?>"><?= htmlspecialchars($txt, ENT_QUOTES, 'UTF-8') ?></div>
     <?php if (!empty($m['media_url'])): ?>
       <?php $mtype = (string)($m['media_type'] ?? ''); ?>
@@ -352,6 +460,7 @@ foreach ($messages as $m):
   <button class="btn-send" type="submit">&#10148;</button>
 </form>
 </div>
+<div id="dmTypingIndicator" style="min-height:18px;padding:0 14px 8px;color:#8f98a3;font-size:.78rem" aria-live="polite"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -416,11 +525,106 @@ function clearDmFile() {
       var s = String(row.sender_id || '');
       var r = String(row.receiver_id || '');
       var isPair = (s === me && r === other) || (s === other && r === me);
-      if (isPair) window.location.reload();
+      if (isPair) appendDmRow(row);
     })
     .subscribe();
   window.addEventListener('beforeunload', function () {
     try { _sb.removeChannel(channel); } catch (e) {}
+  });
+})();
+
+function escDm(s) {
+  if (!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function appendDmRow(row) {
+  var box = document.getElementById('dmScroll');
+  if (!box || !row) return;
+  var id = String(row.id || '');
+  if (id && box.querySelector('[data-msg-id="' + id + '"]')) return;
+  var isMe = String(row.sender_id || '') === <?= json_encode((string) $current_user_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var mtype = String(row.media_type || '');
+  var media = row.media_url ? String(row.media_url) : '';
+  var txt = row.content ? String(row.content) : '';
+  var html = '<div class="msg-row ' + (isMe ? 'me' : 'them') + '" data-msg-id="' + escDm(id) + '">';
+  html += '<div class="msg-bub ' + (isMe ? 'me' : 'them') + '">' + escDm(txt) + '</div>';
+  if (media) {
+    if (mtype.indexOf('image/') === 0) {
+      html += '<img src="' + escDm(media) + '" style="max-width:220px;border-radius:10px;margin-top:6px;display:block;cursor:pointer" onclick="window.open(this.src)">';
+    } else if (mtype.indexOf('video/') === 0) {
+      html += '<video controls src="' + escDm(media) + '" style="max-width:220px;border-radius:10px;margin-top:6px;display:block"></video>';
+    }
+  }
+  html += '</div>';
+  box.insertAdjacentHTML('beforeend', html);
+  box.scrollTop = box.scrollHeight;
+}
+
+(function () {
+  var form = document.getElementById('dmForm');
+  var ta = document.getElementById('dmInput');
+  var fileEl = document.getElementById('dmFile');
+  var typingEl = document.getElementById('dmTypingIndicator');
+  var sendBtn = form ? form.querySelector('button[type="submit"]') : null;
+  var inFlight = false;
+  var lastTypingAt = 0;
+  if (!form) return;
+
+  function pingTyping() {
+    if (!ta || !ta.value || !ta.value.trim()) return;
+    var now = Date.now();
+    if (now - lastTypingAt < 1800) return;
+    lastTypingAt = now;
+    fetch('<?= htmlspecialchars($dmFormAction, ENT_QUOTES, 'UTF-8') ?>&typing=1', {
+      method: 'POST',
+      credentials: 'same-origin'
+    }).catch(function () {});
+  }
+
+  function pollTyping() {
+    fetch('<?= htmlspecialchars($dmFormAction, ENT_QUOTES, 'UTF-8') ?>&typing=1', { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!typingEl) return;
+        typingEl.textContent = (j && j.ok && j.typing) ? 'digitando...' : '';
+      })
+      .catch(function () {});
+  }
+
+  if (ta) ta.addEventListener('input', pingTyping);
+  setInterval(pollTyping, 2000);
+  pollTyping();
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (inFlight) return;
+    var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
+    var text = ta ? ta.value.trim() : '';
+    if (!text && !hasFile) return;
+    inFlight = true;
+    if (sendBtn) sendBtn.disabled = true;
+    var fd = new FormData(form);
+    fd.append('ajax', '1');
+    fetch(form.getAttribute('action') || window.location.href, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'X-Requested-With': 'XMLHttpRequest' },
+      body: fd
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (!j || !j.ok || !j.message) throw new Error('send');
+      appendDmRow(j.message);
+      if (ta) ta.value = '';
+      if (fileEl) fileEl.value = '';
+      clearDmFile();
+    }).catch(function () {
+      alert('Não foi possível enviar a mensagem agora.');
+    }).finally(function () {
+      inFlight = false;
+      if (sendBtn) sendBtn.disabled = false;
+    });
   });
 })();
 </script>

@@ -532,3 +532,98 @@ function club61_chat_upsert_presence(string $userId, string $salaId): array
 
     return ['ok' => true];
 }
+
+function club61_chat_typing_store_path(): string
+{
+    return rtrim(sys_get_temp_dir(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'club61_chat_typing.json';
+}
+
+/**
+ * @return array<string, array<string, int>>
+ */
+function club61_chat_typing_read_store(): array
+{
+    $path = club61_chat_typing_store_path();
+    if (!is_file($path)) {
+        return [];
+    }
+    $raw = file_get_contents($path);
+    if (!is_string($raw) || $raw === '') {
+        return [];
+    }
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+/**
+ * @param array<string, array<string, int>> $store
+ */
+function club61_chat_typing_write_store(array $store): void
+{
+    $path = club61_chat_typing_store_path();
+    @file_put_contents($path, json_encode($store, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES), LOCK_EX);
+}
+
+function club61_chat_typing_touch(string $salaId, string $userId, int $ttlSeconds = 4): void
+{
+    if ($salaId === '' || $userId === '') {
+        return;
+    }
+    $store = club61_chat_typing_read_store();
+    if (!isset($store[$salaId]) || !is_array($store[$salaId])) {
+        $store[$salaId] = [];
+    }
+    $now = time();
+    $store[$salaId][$userId] = $now + max(1, $ttlSeconds);
+    foreach ($store as $sid => $users) {
+        if (!is_array($users)) {
+            unset($store[$sid]);
+            continue;
+        }
+        foreach ($users as $uid => $expiresAt) {
+            if ((int) $expiresAt <= $now) {
+                unset($store[$sid][$uid]);
+            }
+        }
+        if ($store[$sid] === []) {
+            unset($store[$sid]);
+        }
+    }
+    club61_chat_typing_write_store($store);
+}
+
+/**
+ * @return list<array{user_id:string, member_line:string}>
+ */
+function club61_chat_typing_list(string $salaId, string $excludeUserId = ''): array
+{
+    $store = club61_chat_typing_read_store();
+    $users = $store[$salaId] ?? [];
+    if (!is_array($users) || $users === []) {
+        return [];
+    }
+    $now = time();
+    $activeIds = [];
+    foreach ($users as $uid => $expiresAt) {
+        $uid = (string) $uid;
+        if ($uid === '' || $uid === $excludeUserId) {
+            continue;
+        }
+        if ((int) $expiresAt > $now) {
+            $activeIds[] = $uid;
+        }
+    }
+    if ($activeIds === []) {
+        return [];
+    }
+    $profiles = club61_chat_fetch_profiles_by_ids($activeIds);
+    $out = [];
+    foreach ($activeIds as $uid) {
+        $p = $profiles[$uid] ?? [];
+        $out[] = [
+            'user_id' => $uid,
+            'member_line' => $p !== [] ? club61_chat_member_line($p) : (club61_display_id_label(null) . ' — Membro'),
+        ];
+    }
+    return $out;
+}

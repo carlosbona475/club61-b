@@ -14,7 +14,7 @@ function club61_chat_api_route(): string
 {
     $uri = $_SERVER['REQUEST_URI'] ?? '';
     $path = parse_url($uri, PHP_URL_PATH) ?: '';
-    if (preg_match('#/chat/(messages|send|enviar|react|online|presence)/?$#', $path, $m)) {
+    if (preg_match('#/chat/(messages|send|enviar|react|online|presence|typing)/?$#', $path, $m)) {
         return $m[1] === 'enviar' ? 'send' : $m[1];
     }
     $r = trim((string) ($_GET['r'] ?? ''));
@@ -94,6 +94,29 @@ if ($route === 'presence' && $method === 'POST') {
         club61_chat_json_response(500, ['ok' => false, 'error' => $res['error'] ?? 'presence']);
     }
     club61_chat_json_response(200, ['ok' => true]);
+}
+
+if ($route === 'typing' && $method === 'POST') {
+    $raw = file_get_contents('php://input') ?: '';
+    $j = json_decode($raw, true);
+    if (!is_array($j)) {
+        $j = [];
+    }
+    $salaId = trim((string) ($j['sala_id'] ?? $_POST['sala_id'] ?? ''));
+    if (club61_city_room_by_slug($salaId) === null) {
+        club61_chat_json_response(400, ['ok' => false, 'error' => 'sala']);
+    }
+    club61_chat_typing_touch($salaId, $uid, 4);
+    club61_chat_json_response(200, ['ok' => true]);
+}
+
+if ($route === 'typing' && $method === 'GET') {
+    $salaId = trim((string) ($_GET['sala_id'] ?? ''));
+    if (club61_city_room_by_slug($salaId) === null) {
+        club61_chat_json_response(400, ['ok' => false, 'error' => 'sala']);
+    }
+    $list = club61_chat_typing_list($salaId, $uid);
+    club61_chat_json_response(200, ['ok' => true, 'typing' => $list]);
 }
 
 if ($route === 'react' && $method === 'POST') {

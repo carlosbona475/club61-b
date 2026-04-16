@@ -103,6 +103,7 @@ $chatEp = [
     'react' => $chatApi . '?r=react',
     'online' => $chatApi . '?r=online',
     'presence' => $chatApi . '?r=presence',
+    'typing' => $chatApi . '?r=typing',
 ];
 ?>
 <!DOCTYPE html>
@@ -175,6 +176,12 @@ body.gm-body{
 .uol-inputbar{
   flex-shrink:0;border-top:1px solid #2a2a2a;background:#0A0A0A;
   padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0px));
+}
+.chat-typing{
+  min-height:18px;
+  font-size:.78rem;
+  color:#9aa0a6;
+  padding:0 4px 6px;
 }
 .uol-chat-form{width:100%}
 #preview-midia{padding:8px}
@@ -352,6 +359,7 @@ foreach ($initialMessages as $m):
     </div>
 
     <div class="uol-inputbar">
+      <div id="chatTypingIndicator" class="chat-typing" aria-live="polite"></div>
       <form id="form-chat" class="uol-chat-form" action="#" method="post" enctype="multipart/form-data" autocomplete="off">
         <input type="hidden" name="sala_id" value="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
         <div id="preview-midia" style="display:none;padding:8px;">
@@ -591,6 +599,48 @@ function cancelarMidia() {
       .catch(function () {});
   }
 
+  function typingIndicatorText(list) {
+    if (!list || !list.length) return '';
+    var names = [];
+    for (var i = 0; i < list.length; i++) {
+      if (list[i] && list[i].member_line) names.push(String(list[i].member_line).split(' — ')[0]);
+    }
+    if (!names.length) return '';
+    if (names.length === 1) return names[0] + ' está digitando...';
+    if (names.length === 2) return names[0] + ' e ' + names[1] + ' estão digitando...';
+    return names.length + ' pessoas estão digitando...';
+  }
+
+  function atualizarTypingStatus() {
+    fetch(EP.typing + '?sala_id=' + encodeURIComponent(sala), { credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        var el = document.getElementById('chatTypingIndicator');
+        if (!el) return;
+        if (!data || !data.ok || !data.typing) {
+          el.textContent = '';
+          return;
+        }
+        el.textContent = typingIndicatorText(data.typing);
+      })
+      .catch(function () {});
+  }
+
+  var lastTypingPingAt = 0;
+  function enviarTypingSeNecessario() {
+    var ta = document.getElementById('input-mensagem');
+    if (!ta || !ta.value || !ta.value.trim()) return;
+    var now = Date.now();
+    if (now - lastTypingPingAt < 1800) return;
+    lastTypingPingAt = now;
+    fetch(EP.typing, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sala_id: sala })
+    }).catch(function () {});
+  }
+
   function renderSideList(users) {
     var title = document.getElementById('uolSideTitle');
     var list = document.getElementById('uolSideList');
@@ -738,15 +788,21 @@ function cancelarMidia() {
       enviarMensagem();
     });
   }
+  var inputMsg = document.getElementById('input-mensagem');
+  if (inputMsg) {
+    inputMsg.addEventListener('input', enviarTypingSeNecessario);
+  }
 
   bindReactButtons(document);
   scrollFeedBottom();
 
   setInterval(carregarMensagens, 3000);
+  setInterval(atualizarTypingStatus, 2000);
   setInterval(atualizarOnline, 15000);
   setInterval(atualizarPresenca, 30000);
   atualizarPresenca();
   atualizarOnline();
+  atualizarTypingStatus();
 
   var side = document.getElementById('uolSidebar');
   var btnPart = document.getElementById('btnParticipantesMobile');

@@ -52,12 +52,18 @@ function club61_supabase_jwt_role(string $jwt): ?string
 $sk = defined('SUPABASE_SERVICE_KEY') ? (string) SUPABASE_SERVICE_KEY : '';
 $svcRole = $sk !== '' ? club61_supabase_jwt_role($sk) : null;
 if ($sk === '' || $svcRole !== 'service_role' || !str_starts_with($sk, 'eyJ')) {
-    if (PHP_SAPI !== 'cli' && !headers_sent()) {
-        header('Location: /features/errors/supabase_service_key.php');
-        exit;
+    if (PHP_SAPI === 'cli') {
+        fwrite(STDERR, "SUPABASE_SERVICE_KEY inválida. Use a service_role key do painel Supabase (JWT eyJ... com role=service_role).\n");
+        exit(1);
     }
-    fwrite(STDERR, "SUPABASE_SERVICE_KEY inválida. Use a service_role key do painel Supabase (JWT eyJ... com role=service_role).\n");
-    exit(1);
+    // Web: nunca exit(1) — muitos hosts devolvem HTTP 500. Redirecionar ou HTML mínimo.
+    $errUrl = '/features/errors/supabase_service_key.php';
+    if (!headers_sent()) {
+        header('Location: ' . $errUrl, true, 302);
+    } else {
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><meta http-equiv="refresh" content="0;url=' . htmlspecialchars($errUrl, ENT_QUOTES, 'UTF-8') . '"></head><body><p>Redirecionando… <a href="' . htmlspecialchars($errUrl, ENT_QUOTES, 'UTF-8') . '">configuração</a></p></body></html>';
+    }
+    exit(0);
 }
 
 return $config;

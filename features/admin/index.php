@@ -350,6 +350,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         admin_redirect_prg('convites', 'Convite gerado: ' . $code, 'ok', $pageQs);
     }
 
+    if ($action === 'enviar_convite_email' || $action === 'enviar_convite_sms') {
+        require_once CLUB61_ROOT . '/config/invite_notify.php';
+        $code = strtoupper(bin2hex(random_bytes(6)));
+        $expires = gmdate('c', time() + 7 * 86400);
+        $payload = [
+            'code' => $code,
+            'created_by' => $current_user_id,
+            'expires_at' => $expires,
+        ];
+        if ($action === 'enviar_convite_email') {
+            $email = trim((string) ($_POST['email_destino'] ?? ''));
+            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                admin_redirect_prg('convites', 'E-mail inválido.', 'error', $pageQs);
+            }
+            $httpCode = admin_json_post('/rest/v1/invites', json_encode($payload, JSON_UNESCAPED_SLASHES));
+            if ($httpCode < 200 || $httpCode >= 300) {
+                admin_redirect_prg('convites', 'Falha ao gravar convite no Supabase (HTTP ' . $httpCode . ').', 'error', $pageQs);
+            }
+            $err = '';
+            if (!club61_send_invite_email($email, $code, $err)) {
+                admin_redirect_prg('convites', 'Convite criado (' . $code . ') mas o e-mail não foi enviado. ' . $err, 'error', $pageQs);
+            }
+            admin_redirect_prg('convites', 'Convite ' . $code . ' enviado por e-mail.', 'ok', $pageQs);
+        }
+        $phoneRaw = trim((string) ($_POST['telefone_destino'] ?? ''));
+        $e164 = club61_normalize_br_phone($phoneRaw);
+        if ($e164 === null) {
+            admin_redirect_prg('convites', 'Telefone inválido. Use DDD + número (ex.: 11999998888).', 'error', $pageQs);
+        }
+        $httpCode = admin_json_post('/rest/v1/invites', json_encode($payload, JSON_UNESCAPED_SLASHES));
+        if ($httpCode < 200 || $httpCode >= 300) {
+            admin_redirect_prg('convites', 'Falha ao gravar convite no Supabase (HTTP ' . $httpCode . ').', 'error', $pageQs);
+        }
+        $err = '';
+        if (!club61_send_invite_sms($e164, $code, $err)) {
+            admin_redirect_prg('convites', 'Convite criado (' . $code . ') mas o SMS não foi enviado. ' . $err, 'error', $pageQs);
+        }
+        admin_redirect_prg('convites', 'Convite ' . $code . ' enviado por SMS (' . $e164 . ').', 'ok', $pageQs);
+    }
+
     if ($action === 'excluir_convite') {
         $inviteId = trim((string) ($_POST['invite_id'] ?? ''));
         if ($inviteId !== '') {
@@ -825,6 +865,20 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum, int $stPageNu
             margin-bottom: 16px;
         }
         .panel-toolbar h2 { font-size: 1rem; font-weight: 600; }
+        .invite-send-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+        @media (max-width: 768px) {
+            .invite-send-grid { grid-template-columns: 1fr; }
+        }
+        .invite-send-card {
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            background: var(--row-a);
+        }
         .btn-gold {
             display: inline-flex;
             align-items: center;
@@ -1096,6 +1150,43 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
 
         <?php if ($tab === 'convites'): ?>
         <section class="admin-section-invites" aria-label="Convites">
+            <div class="panel-card" style="margin-bottom:18px">
+                <h2 style="margin:0 0 10px;font-size:1rem;color:var(--gold)">Enviar convite (e-mail ou SMS)</h2>
+                <p style="color:var(--muted);font-size:0.82rem;line-height:1.5;margin:0 0 14px">
+                    Gera um código no <strong>Supabase</strong> (tabela <code>invites</code>) e envia por <strong>Resend</strong> (e-mail) ou <strong>Twilio</strong> (SMS).
+                    Configure as chaves no <code>.env</code> do servidor (ver <code>config/invite_notify.php</code>).
+                </p>
+                <div class="invite-send-grid">
+                    <div class="invite-send-card">
+                        <h3 style="margin:0 0 10px;font-size:0.88rem;color:#ddd">E-mail</h3>
+                        <form method="post" action="" style="display:flex;flex-direction:column;gap:10px">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="return_tab" value="convites">
+                            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                            <input type="hidden" name="action" value="enviar_convite_email">
+                            <label for="email_destino" class="stat-label-dash" style="display:block;font-size:0.72rem;color:var(--muted)">Destinatário</label>
+                            <input type="email" class="dark-input" id="email_destino" name="email_destino" required placeholder="nome@exemplo.com" autocomplete="email">
+                            <button type="submit" class="btn-gold" style="align-self:flex-start">📧 Gerar e enviar por e-mail</button>
+                        </form>
+                    </div>
+                    <div class="invite-send-card">
+                        <h3 style="margin:0 0 10px;font-size:0.88rem;color:#ddd">SMS (Brasil)</h3>
+                        <form method="post" action="" style="display:flex;flex-direction:column;gap:10px">
+                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
+                            <input type="hidden" name="return_tab" value="convites">
+                            <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
+                            <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
+                            <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
+                            <input type="hidden" name="action" value="enviar_convite_sms">
+                            <label for="telefone_destino" class="stat-label-dash" style="display:block;font-size:0.72rem;color:var(--muted)">Telefone (DDD + número)</label>
+                            <input type="tel" class="dark-input" id="telefone_destino" name="telefone_destino" required placeholder="11999998888" inputmode="numeric" autocomplete="tel">
+                            <button type="submit" class="btn-gold" style="align-self:flex-start">📱 Gerar e enviar por SMS</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
             <div class="panel-card">
                 <div class="panel-toolbar">
                     <h2>Convites</h2>

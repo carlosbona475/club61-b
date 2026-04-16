@@ -199,6 +199,39 @@ function club61_chat_fetch_messages_for_sala(string $salaId, ?string $afterIso, 
 }
 
 /**
+ * @return array<string, mixed>|null
+ */
+function club61_chat_fetch_message_by_id(string $messageId): ?array
+{
+    if ($messageId === '' || !defined('SUPABASE_URL')) {
+        return null;
+    }
+    $sel = rawurlencode('id,user_id,conteudo,tipo,media_url,created_at,sala_id');
+    $url = SUPABASE_URL . '/rest/v1/chat_messages?select=' . $sel
+        . '&id=eq.' . rawurlencode($messageId)
+        . '&limit=1';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => club61_chat_service_headers(false),
+        CURLOPT_HTTPGET => true,
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return null;
+    }
+    $decoded = json_decode($raw, true);
+    if (!is_array($decoded) || !isset($decoded[0]) || !is_array($decoded[0])) {
+        return null;
+    }
+    return $decoded[0];
+}
+
+/**
  * Monta mensagens com autor e reações para API/SSR.
  *
  * @param list<array<string, mixed>> $rows

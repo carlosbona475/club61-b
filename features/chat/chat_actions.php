@@ -253,6 +253,7 @@ if ($route === 'send' && $method === 'POST') {
     }
 
     $lastIso = null;
+    $messagePayload = null;
     if (!empty($ins['id'])) {
         $u = SUPABASE_URL . '/rest/v1/chat_messages?id=eq.' . rawurlencode((string) $ins['id'])
             . '&select=created_at';
@@ -270,9 +271,21 @@ if ($route === 'send' && $method === 'POST') {
         if (is_array($row) && isset($row[0]['created_at'])) {
             $lastIso = (string) $row[0]['created_at'];
         }
+        $fresh = club61_chat_fetch_message_by_id((string) $ins['id']);
+        if (is_array($fresh)) {
+            $enriched = club61_chat_enrich_messages([$fresh]);
+            if (isset($enriched[0]) && is_array($enriched[0])) {
+                $messagePayload = $enriched[0];
+            }
+        }
     }
 
-    club61_chat_json_response(200, ['ok' => true, 'id' => $ins['id'] ?? null, 'created_at' => $lastIso]);
+    club61_chat_json_response(200, [
+        'ok' => true,
+        'id' => $ins['id'] ?? null,
+        'created_at' => $lastIso,
+        'message' => $messagePayload,
+    ]);
 }
 
 club61_chat_json_response(405, ['ok' => false, 'error' => 'method']);

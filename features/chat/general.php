@@ -740,9 +740,11 @@ function cancelarMidia() {
         .then(function (o) {
           var ok = o.j && (o.j.ok === true || o.j.success === true);
           if (o.r.ok && ok) {
+            if (o.j && o.j.message) {
+              appendMessages([o.j.message]);
+            }
             if (ta) ta.value = '';
             cancelarMidia();
-            carregarMensagens();
             scrollFeedBottom();
             sendInFlight = false;
             if (btnEnviar) {

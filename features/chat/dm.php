@@ -475,7 +475,9 @@ foreach ($messages as $m):
         e.preventDefault();
         var f = document.getElementById('dmForm');
         var hasFile = dmFile && dmFile.files && dmFile.files.length > 0;
-        if (ta.value.trim() !== '' || hasFile) f.submit();
+        if (ta.value.trim() !== '' || hasFile) {
+          if (typeof f.requestSubmit === 'function') f.requestSubmit(); else f.dispatchEvent(new Event('submit', { cancelable: true }));
+        }
       }
     });
   }

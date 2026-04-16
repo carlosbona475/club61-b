@@ -22,8 +22,11 @@ a{color:inherit}
 .topnav-brand{font-size:1.15rem;font-weight:800;color:#C9A84C;letter-spacing:0.12em;text-decoration:none}
 .topnav-right{display:flex;align-items:center;gap:10px}
 .topnav-count{font-size:0.72rem;color:#555;font-weight:500}
-.topnav-profile{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#111;border:1px solid #222;color:#888;text-decoration:none;font-size:1.1rem}
+.topnav-profile{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:#111;border:1px solid #222;color:#888;text-decoration:none;font-size:1.1rem;overflow:hidden;flex-shrink:0;-webkit-tap-highlight-color:transparent}
 .topnav-profile:hover{color:#C9A84C;border-color:#333}
+.topnav-profile img{width:100%;height:100%;object-fit:cover;display:block;border-radius:50%}
+.topnav-profile.has-photo{padding:0;border-color:#2a2a2a}
+.topnav-profile.has-photo:hover{border-color:#C9A84C}
 /* Localização: header (desktop) */
 .feed-loc-nav-btn{
   display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;
@@ -211,6 +214,9 @@ a{color:inherit}
 </style>
 </head>
 <body>
+<?php
+$feedMyAvatarUrl = isset($feedMyAvatarUrl) && is_string($feedMyAvatarUrl) ? trim($feedMyAvatarUrl) : '';
+?>
 
 <header class="topnav">
   <a class="topnav-brand" href="/features/feed/index.php">Club61</a>
@@ -224,7 +230,13 @@ a{color:inherit}
         <path d="M12 2v2M12 20v2M2 12h2M20 12h2" opacity="0.6"/>
       </svg>
     </a>
-    <a class="topnav-profile" href="/features/profile/index.php" title="Perfil" aria-label="Perfil">👤</a>
+    <a class="topnav-profile<?= $feedMyAvatarUrl !== '' ? ' has-photo' : '' ?>" href="/features/profile/index.php" title="Meu perfil" aria-label="Ir para o meu perfil">
+      <?php if ($feedMyAvatarUrl !== ''): ?>
+      <img src="<?= htmlspecialchars($feedMyAvatarUrl, ENT_QUOTES, 'UTF-8') ?>" alt="">
+      <?php else: ?>
+      <span aria-hidden="true">👤</span>
+      <?php endif; ?>
+    </a>
   </div>
 </header>
 
@@ -473,100 +485,102 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
     toast.style.display = 'block';
     setTimeout(function(){ toast.style.display = 'none'; }, 3000);
   }
-  document.querySelectorAll('[data-like-btn]').forEach(function(btn){
-    btn.addEventListener('click', function(){
-      var pid = btn.getAttribute('data-post-id');
-      if (!pid) return;
-      var fd = new FormData();
-      fd.append('post_id', pid);
-      fd.append('csrf', FEED_CSRF);
-      btn.disabled = true;
-      fetch('/features/feed/toggle_like.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-        .then(parseJsonSafe)
-        .then(function(d){
-          if (!d) {
-            likeFallback(pid, btn.classList.contains('is-liked'));
-            return;
-          }
-          if (d.csrf) FEED_CSRF = d.csrf;
-          if (!d.ok || (d.status !== 'liked' && d.status !== 'unliked')) {
-            if (d.error === 'csrf') {
-              feedToast('Sessão expirada. Atualizando página...', 'error');
-              setTimeout(function(){ window.location.reload(); }, 600);
-              return;
-            }
-            feedToast('Falha ao curtir. Tentando modo compatível...', 'error');
-            likeFallback(pid, btn.classList.contains('is-liked'));
-            return;
-          }
-          var card = btn.closest('.post-block');
-          var cnt = card ? card.querySelector('[data-like-count]') : null;
-          if (cnt && typeof d.likes_count === 'number') cnt.textContent = d.likes_count;
-          btn.classList.toggle('is-liked', !!d.liked);
-          btn.setAttribute('aria-pressed', d.liked ? 'true' : 'false');
-          btn.setAttribute('aria-label', d.liked ? 'Descurtir' : 'Curtir');
-          btn.innerHTML = d.liked ? '♥' : '♡';
-        })
-        .catch(function(){
-          feedToast('Falha de rede ao curtir. Tentando modo compatível...', 'error');
+  document.addEventListener('click', function(ev){
+    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-like-btn]') : null;
+    if (!btn) return;
+    ev.preventDefault();
+    var pid = btn.getAttribute('data-post-id');
+    if (!pid) return;
+    var fd = new FormData();
+    fd.append('post_id', pid);
+    fd.append('csrf', FEED_CSRF);
+    btn.disabled = true;
+    fetch('/features/feed/toggle_like.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(parseJsonSafe)
+      .then(function(d){
+        if (!d) {
           likeFallback(pid, btn.classList.contains('is-liked'));
-        })
-        .finally(function(){ btn.disabled = false; });
-    });
+          return;
+        }
+        if (d.csrf) FEED_CSRF = d.csrf;
+        if (!d.ok || (d.status !== 'liked' && d.status !== 'unliked')) {
+          if (d.error === 'csrf') {
+            feedToast('Sessão expirada. Atualizando página...', 'error');
+            setTimeout(function(){ window.location.reload(); }, 600);
+            return;
+          }
+          feedToast('Falha ao curtir. Tentando modo compatível...', 'error');
+          likeFallback(pid, btn.classList.contains('is-liked'));
+          return;
+        }
+        var card = btn.closest('.post-block');
+        var cnt = card ? card.querySelector('[data-like-count]') : null;
+        if (cnt && typeof d.likes_count === 'number') cnt.textContent = d.likes_count;
+        btn.classList.toggle('is-liked', !!d.liked);
+        btn.setAttribute('aria-pressed', d.liked ? 'true' : 'false');
+        btn.setAttribute('aria-label', d.liked ? 'Descurtir' : 'Curtir');
+        btn.innerHTML = d.liked ? '♥' : '♡';
+      })
+      .catch(function(){
+        feedToast('Falha de rede ao curtir. Tentando modo compatível...', 'error');
+        likeFallback(pid, btn.classList.contains('is-liked'));
+      })
+      .finally(function(){ btn.disabled = false; });
   });
-  document.querySelectorAll('[data-comment-form]').forEach(function(form){
-    form.addEventListener('submit', function(ev){
-      ev.preventDefault();
-      var pid = form.getAttribute('data-post-id');
-      var inp = form.querySelector('input[name="comment"]');
-      if (!pid || !inp) return;
-      var text = (inp.value || '').trim();
-      if (!text) return;
-      var btn = form.querySelector('button[type="submit"]');
-      var fd = new FormData();
-      fd.append('post_id', pid);
-      fd.append('comment', text);
-      fd.append('csrf', FEED_CSRF);
-      if (btn) btn.disabled = true;
-      fetch('/features/feed/add_comment.php', { method: 'POST', body: fd, credentials: 'same-origin' })
-        .then(parseJsonSafe)
-        .then(function(d){
-          if (!d) {
-            feedToast('Não foi possível comentar agora.', 'error');
+  document.addEventListener('submit', function(ev){
+    var form = ev.target && ev.target.matches && ev.target.matches('[data-comment-form]') ? ev.target : null;
+    if (!form) return;
+    ev.preventDefault();
+    var pid = form.getAttribute('data-post-id');
+    var inp = form.querySelector('input[name="comment"]');
+    if (!pid || !inp) return;
+    var text = (inp.value || '').trim();
+    if (!text) return;
+    var btn = form.querySelector('button[type="submit"]');
+    var fd = new FormData();
+    fd.append('post_id', pid);
+    fd.append('comment', text);
+    fd.append('csrf', FEED_CSRF);
+    if (btn) btn.disabled = true;
+    fetch('/features/feed/add_comment.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+      .then(parseJsonSafe)
+      .then(function(d){
+        if (!d) {
+          feedToast('Não foi possível comentar agora.', 'error');
+          return;
+        }
+        if (d.csrf) FEED_CSRF = d.csrf;
+        if (!d.ok || !d.html) {
+          if (d.error === 'csrf') {
+            feedToast('Sessão expirada. Atualizando página...', 'error');
+            setTimeout(function(){ window.location.reload(); }, 600);
             return;
           }
-          if (d.csrf) FEED_CSRF = d.csrf;
-          if (!d.ok || !d.html) {
-            if (d.error === 'csrf') {
-              feedToast('Sessão expirada. Atualizando página...', 'error');
-              setTimeout(function(){ window.location.reload(); }, 600);
-              return;
-            }
-            if (d.error === 'comments_unavailable') {
-              feedToast('Comentários indisponíveis: execute o SQL de upgrade do feed.', 'error');
-            } else if (d.error === 'rate_limit') {
-              feedToast('Aguarde alguns segundos para comentar novamente.', 'error');
-            } else {
-              feedToast('Falha ao enviar comentário.', 'error');
-            }
-            return;
+          if (d.error === 'comments_unavailable') {
+            feedToast('Comentários indisponíveis no momento.', 'error');
+          } else if (d.error === 'rate_limit') {
+            feedToast('Aguarde alguns segundos para comentar novamente.', 'error');
+          } else {
+            feedToast('Falha ao enviar comentário.', 'error');
           }
-          inp.value = '';
-          var card = form.closest('.post-block');
-          var list = card ? card.querySelector('[data-comment-list]') : null;
-          if (list) {
-            list.style.display = 'block';
-            list.insertAdjacentHTML('beforeend', d.html);
-            while (list.querySelectorAll('.comment-line').length > 3) {
-              list.removeChild(list.firstChild);
-            }
+          return;
+        }
+        inp.value = '';
+        var card = form.closest('.post-block');
+        var list = card ? card.querySelector('[data-comment-list]') : null;
+        if (list) {
+          list.style.display = 'block';
+          list.insertAdjacentHTML('beforeend', d.html);
+          while (list.querySelectorAll('.comment-line').length > 3) {
+            if (list.firstElementChild) list.removeChild(list.firstElementChild);
+            else break;
           }
-        })
-        .catch(function(){
-          feedToast('Erro de rede ao comentar.', 'error');
-        })
-        .finally(function(){ if (btn) btn.disabled = false; });
-    });
+        }
+      })
+      .catch(function(){
+        feedToast('Erro de rede ao comentar.', 'error');
+      })
+      .finally(function(){ if (btn) btn.disabled = false; });
   });
   var backdrop = document.getElementById('postModalBackdrop');
   var openBtn = document.getElementById('openPostModal');

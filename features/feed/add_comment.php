@@ -39,12 +39,12 @@ if ($userId === '') {
     exit;
 }
 
-if (!feed_sk_available() || !feed_post_comments_table_ready()) {
+if (!feed_sk_available() || (!feed_post_comments_table_ready() && !feed_comments_table_ready())) {
     http_response_code(503);
     echo json_encode([
         'ok' => false,
         'error' => 'comments_unavailable',
-        'hint' => 'Execute sql/social_feed_upgrade.sql no Supabase para criar post_comments.',
+        'hint' => 'Comentários indisponíveis no banco (post_comments/comments).',
     ]);
 
     exit;
@@ -96,13 +96,19 @@ if (!feed_post_exists($postId)) {
     exit;
 }
 
-$body = json_encode([
+$commentTable = feed_post_comments_table_ready() ? 'post_comments' : 'comments';
+$commentPayload = [
     'post_id' => $postId,
     'user_id' => $userId,
-    'comment_text' => $comment,
-], JSON_UNESCAPED_UNICODE);
+];
+if ($commentTable === 'post_comments') {
+    $commentPayload['comment_text'] = $comment;
+} else {
+    $commentPayload['text'] = $comment;
+}
+$body = json_encode($commentPayload, JSON_UNESCAPED_UNICODE);
 
-$ch = curl_init(SUPABASE_URL . '/rest/v1/post_comments');
+$ch = curl_init(SUPABASE_URL . '/rest/v1/' . $commentTable);
 curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_POSTFIELDS => $body,

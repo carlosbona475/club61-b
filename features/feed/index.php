@@ -235,6 +235,34 @@ $feedHasOlder = count($posts) >= $feedPerPage;
 $feedOlderUrl = '/features/feed/index.php?page=' . ($feedPage + 1);
 $is_admin = isCurrentUserAdmin();
 
+/** Avatar do utilizador atual (header do feed → link para o perfil) */
+$feedMyAvatarUrl = '';
+if ($current_user_id !== '' && $access_token !== '') {
+    $meProfUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . rawurlencode($current_user_id) . '&select=avatar_url';
+    $chMe = curl_init($meProfUrl);
+    curl_setopt_array($chMe, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => supabase_service_role_available()
+            ? array_merge(supabase_service_rest_headers(false), ['Accept: application/json'])
+            : ['apikey: ' . SUPABASE_ANON_KEY, 'Authorization: Bearer ' . $access_token],
+        CURLOPT_HTTPGET => true,
+    ]);
+    $meRaw = curl_exec($chMe);
+    $meCode = (int) curl_getinfo($chMe, CURLINFO_HTTP_CODE);
+    curl_close($chMe);
+    if ($meRaw !== false && $meCode >= 200 && $meCode < 300) {
+        $meRows = json_decode($meRaw, true);
+        if (is_array($meRows) && isset($meRows[0]['avatar_url'])) {
+            $u = trim((string) $meRows[0]['avatar_url']);
+            if ($u !== '') {
+                $feedMyAvatarUrl = $u;
+            }
+        }
+    }
+}
+
 ob_start();
 require __DIR__ . '/feed_view.php';
 $feedHtml = (string) ob_get_clean();

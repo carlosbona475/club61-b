@@ -39,14 +39,46 @@ function profile_count_posts(string $userId): int
     $hs = curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     curl_close($ch);
     if ($resp === false || $hs <= 0) {
-        return 0;
+        return profile_count_posts_fallback($userId);
     }
     $headers = substr($resp, 0, (int) $hs);
-    if (preg_match('/content-range:\s*[^/]*\/(\d+)/i', $headers, $m)) {
+    // PostgREST: Content-Range: 0-0/123 ou */123
+    if (preg_match('/content-range:[^\r\n]*\/(\d+)/i', $headers, $m)) {
         return (int) $m[1];
     }
 
-    return 0;
+    return profile_count_posts_fallback($userId);
+}
+
+/**
+ * Conta posts via lista (fallback se cabeçalho Content-Range não vier ou proxy o remover).
+ */
+function profile_count_posts_fallback(string $userId): int
+{
+    if ($userId === '' || !profile_stats_service_ok()) {
+        return 0;
+    }
+    $url = SUPABASE_URL . '/rest/v1/posts?user_id=eq.' . urlencode($userId) . '&select=id&limit=5000';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+        CURLOPT_HTTPGET => true,
+    ]);
+    $raw = curl_exec($ch);
+    curl_close($ch);
+    $rows = json_decode((string) $raw, true);
+    if (!is_array($rows)) {
+        return 0;
+    }
+
+    return count($rows);
 }
 
 function profile_count_likes_received(string $userId): int

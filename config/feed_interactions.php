@@ -79,6 +79,38 @@ function feed_post_comments_table_ready(): bool
     return (bool) $GLOBALS['_club61_post_comments_probe'];
 }
 
+/** @var bool|null */
+$GLOBALS['_club61_comments_probe'] = null;
+
+function feed_comments_table_ready(): bool
+{
+    if ($GLOBALS['_club61_comments_probe'] !== null) {
+        return (bool) $GLOBALS['_club61_comments_probe'];
+    }
+    $GLOBALS['_club61_comments_probe'] = false;
+    if (!feed_sk_available()) {
+        return false;
+    }
+    $url = SUPABASE_URL . '/rest/v1/comments?select=id&limit=1';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    $GLOBALS['_club61_comments_probe'] = ($code >= 200 && $code < 300);
+
+    return (bool) $GLOBALS['_club61_comments_probe'];
+}
+
 /**
  * Contagem exata via PostgREST (Prefer: count=exact + Range: 0-0).
  */
@@ -416,7 +448,7 @@ function feed_get_user_liked_post_ids(string $userId, array $postIds): array
 function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): array
 {
     $result = [];
-    if ($postIds === [] || !feed_sk_available() || !feed_post_comments_table_ready()) {
+    if ($postIds === [] || !feed_sk_available()) {
         return $result;
     }
     $ids = array_unique(array_map('intval', $postIds));
@@ -429,7 +461,12 @@ function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): ar
     }
     $in = implode(',', $ids);
     $cap = max(1, min(200, count($ids) * max(1, $limitPerPost) * 2));
-    $url = SUPABASE_URL . '/rest/v1/post_comments?select=id,post_id,user_id,comment_text,created_at'
+    $table = feed_post_comments_table_ready() ? 'post_comments' : (feed_comments_table_ready() ? 'comments' : '');
+    if ($table === '') {
+        return $result;
+    }
+    $textCol = $table === 'post_comments' ? 'comment_text' : 'text';
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=id,post_id,user_id,' . $textCol . ',created_at'
         . '&post_id=in.(' . $in . ')'
         . '&order=created_at.desc&limit=' . $cap;
     $ch = curl_init($url);
@@ -463,6 +500,9 @@ function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): ar
         }
         if (count($result[$pid]) >= $limitPerPost) {
             continue;
+        }
+        if ($table === 'comments') {
+            $r['comment_text'] = isset($r['text']) ? (string) $r['text'] : '';
         }
         $result[$pid][] = $r;
     }
@@ -620,10 +660,15 @@ function getRecentComments(int $postId, int $limit = 3): array
  */
 function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
 {
-    if ($postId <= 0 || !feed_sk_available() || !feed_post_comments_table_ready()) {
+    if ($postId <= 0 || !feed_sk_available()) {
         return [];
     }
-    $url = SUPABASE_URL . '/rest/v1/post_comments?select=id,post_id,user_id,comment_text,created_at'
+    $table = feed_post_comments_table_ready() ? 'post_comments' : (feed_comments_table_ready() ? 'comments' : '');
+    if ($table === '') {
+        return [];
+    }
+    $textCol = $table === 'post_comments' ? 'comment_text' : 'text';
+    $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=id,post_id,user_id,' . $textCol . ',created_at'
         . '&post_id=eq.' . $postId
         . '&order=created_at.asc&limit=' . max(1, min(500, $limit));
     $ch = curl_init($url);
@@ -640,8 +685,19 @@ function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
     $raw = curl_exec($ch);
     curl_close($ch);
     $rows = json_decode((string) $raw, true);
+    if (!is_array($rows)) {
+        return [];
+    }
+    if ($table === 'comments') {
+        foreach ($rows as &$rr) {
+            if (is_array($rr)) {
+                $rr['comment_text'] = isset($rr['text']) ? (string) $rr['text'] : '';
+            }
+        }
+        unset($rr);
+    }
 
-    return is_array($rows) ? $rows : [];
+    return $rows;
 }
 
 /**

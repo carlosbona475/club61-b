@@ -70,10 +70,12 @@ $access_token = isset($_SESSION['access_token']) ? $_SESSION['access_token'] : '
 // No próprio perfil a URL deve ser: .../profiles?id=eq.{ $current_user_id }&select=...
 // Com ?user= (outro membro) usa-se o id desse perfil.
 $profile_lookup_id = ($profile_user_id !== null && $profile_user_id !== '') ? (string) $profile_user_id : '';
-$is_own_profile = $current_user_id !== null && (string) $profile_user_id === (string) $current_user_id;
+/** @var bool Definido após carregar perfil (UUID); antes disso usa-se $fetch_self_profile só no 1.º GET. */
+$is_own_profile = false;
+$fetch_self_profile = $current_user_id !== null && (string) $profile_user_id === (string) $current_user_id;
 
 if ($access_token !== '' && $profile_lookup_id !== '') {
-    if ($is_own_profile) {
+    if ($fetch_self_profile) {
         $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
     } else {
         $profile_url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $profile_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
@@ -98,11 +100,45 @@ if ($access_token !== '' && $profile_lookup_id !== '') {
     }
 }
 
+// ?user=CL01… não é UUID: resolver via display_id (posts/follows usam user_id uuid)
+if (
+    (!is_array($profileRow) || empty($profileRow))
+    && $profile_lookup_id !== ''
+    && supabase_service_role_available()
+) {
+    $dispQ = strtoupper(trim($profile_lookup_id));
+    if (preg_match('/^CL\d+$/', $dispQ)) {
+        $dispUrl = SUPABASE_URL . '/rest/v1/profiles?display_id=eq.' . rawurlencode($dispQ) . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
+        $chD = curl_init($dispUrl);
+        curl_setopt_array($chD, [
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => false,
+            CURLOPT_HTTPHEADER => array_merge(supabase_service_rest_headers(false), ['Accept: application/json']),
+            CURLOPT_HTTPGET => true,
+        ]);
+        $dispBody = curl_exec($chD);
+        $dispHttp = curl_getinfo($chD, CURLINFO_HTTP_CODE);
+        curl_close($chD);
+        if ($dispBody !== false && $dispHttp >= 200 && $dispHttp < 300) {
+            $dispRows = json_decode($dispBody, true);
+            if (is_array($dispRows) && !empty($dispRows[0])) {
+                $profileRow = $dispRows[0];
+            }
+        }
+    }
+}
+
+if (is_array($profileRow) && isset($profileRow['id']) && trim((string) $profileRow['id']) !== '') {
+    $profile_lookup_id = (string) $profileRow['id'];
+}
+$is_own_profile = $current_user_id !== null && $profile_lookup_id !== '' && (string) $profile_lookup_id === (string) $current_user_id;
+
 // display_id vazio no próprio perfil: atribuir CL sequencial (service_role no helper)
 if (
     is_array($profileRow)
     && $current_user_id !== null
-    && (string) $profile_user_id === (string) $current_user_id
+    && $is_own_profile
 ) {
     $dcheck = isset($profileRow['display_id']) ? trim((string) $profileRow['display_id']) : '';
     if ($dcheck === '') {
@@ -116,7 +152,7 @@ if (
 // Próprio perfil: reforçar dados via service_role se RLS ocultar campos no JWT
 if (
     $current_user_id !== null
-    && (string) $profile_user_id === (string) $current_user_id
+    && $is_own_profile
     && supabase_service_role_available()
 ) {
     $svcUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . $current_user_id . '&select=' . rawurlencode(CLUB61_PROFILE_REST_SELECT);
@@ -284,6 +320,10 @@ if ($profile_lookup_id !== '') {
     } else {
         $statPosts = count($myPosts);
         $statLikesRecv = 0;
+    }
+    $postsLoadedCount = count($myPosts);
+    if ($postsLoadedCount > $statPosts) {
+        $statPosts = $postsLoadedCount;
     }
 }
 
@@ -858,8 +898,15 @@ $igShowRel = trim($profileRelationship) !== '';
             color: #7B2EFF;
         }
         .ig-main-col { flex: 1; min-width: 0; }
-        .ig-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; justify-content: space-between; }
-        .ig-title-actions { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+        .ig-title-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 6px; justify-content: space-between; width: 100%; }
+        .ig-title-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; max-width: 100%; }
+        .ig-title-actions .btn-follow-ig { min-width: 92px; padding: 8px 12px; font-size: 0.78rem; }
+        .ig-title-actions .btn-msg-ig { flex: 0 0 auto; min-width: auto; padding: 8px 12px; font-size: 0.78rem; }
+        .ig-pending-cta {
+            margin-left: auto; font-size: 0.78rem; font-weight: 700; color: #C9A84C; text-decoration: none;
+            padding: 6px 10px; border-radius: 8px; border: 1px solid rgba(201, 168, 76, 0.35); background: rgba(201, 168, 76, 0.08); white-space: nowrap;
+        }
+        .ig-pending-cta:hover { background: rgba(201, 168, 76, 0.15); color: #e8d5a3; }
         .btn-admin-link {
             display: inline-block;
             padding: 6px 14px;
@@ -1093,22 +1140,10 @@ $igShowRel = trim($profileRelationship) !== '';
                         <?php endif; ?>
                     </div>
                     <div class="ig-main-col">
-                        <div class="ig-title-row" style="justify-content:flex-start">
+                        <div class="ig-title-row">
                             <h2 class="ig-username"><?= htmlspecialchars($clLabel, ENT_QUOTES, 'UTF-8') ?></h2>
-                        </div>
-                        <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
-                        <p class="ig-dono">Dono do Site</p>
-                        <?php endif; ?>
-                        <div class="ig-actions">
-                            <?php if ($is_own_profile): ?>
-                            <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
-                            <a class="btn-ig-story" href="/features/profile/upload_story.php"><i class="bi bi-camera" aria-hidden="true"></i> Enviar story</a>
-                            <a class="btn-ig-story" href="/features/chat/salas.php">💬 Salas de chat</a>
-                            <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
-                            <a class="btn-admin-link" href="/features/admin/index.php" style="margin-top:8px;display:inline-block">Painel admin</a>
-                            <?php endif; ?>
-                            <?php elseif (!$is_own_profile && $current_user_id !== null && $profile_lookup_id !== ''): ?>
-                            <div class="ig-actions-row">
+                            <?php if (!$is_own_profile && $current_user_id !== null && $profile_lookup_id !== ''): ?>
+                            <div class="ig-title-actions">
                             <?php if (club61_follows_service_ok()): ?>
                                 <?php
                                 $flabel = 'Seguir';
@@ -1135,22 +1170,37 @@ $igShowRel = trim($profileRelationship) !== '';
                             </button>
                             <?php endif; ?>
                             <?php if ($mrBtn === 'accepted'): ?>
-                            <a class="btn-msg-ig btn-mensagem" href="/mensagens?com=<?= rawurlencode((string) $profile_lookup_id) ?>">✉️ Mensagem</a>
+                            <a class="btn-msg-ig btn-mensagem" href="/mensagens?com=<?= rawurlencode((string) $profile_lookup_id) ?>" title="Mensagem">✉️</a>
                             <?php elseif ($mrBtn !== 'hidden'): ?>
                                 <?php if ($mrBtn === 'request'): ?>
-                                <form action="/features/profile/message_request.php" method="post" style="flex:1;min-width:120px">
+                                <form action="/features/profile/message_request.php" method="post" style="margin:0;display:inline">
                                     <input type="hidden" name="csrf" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="to_user" value="<?= htmlspecialchars((string) $profile_lookup_id, ENT_QUOTES, 'UTF-8') ?>">
                                     <input type="hidden" name="return_to" value="<?= htmlspecialchars('/features/profile/index.php?user=' . rawurlencode((string) $profile_lookup_id), ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="submit" class="btn-msg-ig" style="width:100%">Pedir mensagem</button>
+                                    <button type="submit" class="btn-msg-ig" title="Pedir mensagem">✉️ Pedir</button>
                                 </form>
                                 <?php elseif ($mrBtn === 'pending_sent'): ?>
-                                <span class="btn-msg-ig" style="opacity:0.7;cursor:default">Pedido enviado</span>
+                                <span class="btn-msg-ig" style="opacity:0.7;cursor:default;font-size:0.72rem">Pedido enviado</span>
                                 <?php elseif ($mrBtn === 'pending_inbox'): ?>
-                                <a class="btn-msg-ig" href="/features/chat/message_requests_inbox.php">Responder pedido</a>
+                                <a class="btn-msg-ig" href="/features/chat/message_requests_inbox.php">✉️ Responder</a>
                                 <?php endif; ?>
                             <?php endif; ?>
                             </div>
+                            <?php elseif ($is_own_profile && $pendingFollowCount > 0 && $pendingFollowRows !== []): ?>
+                            <a class="ig-pending-cta" href="#ig-follow-pending"><?= (int) $pendingFollowCount ?> pedido(s) — Aceitar</a>
+                            <?php endif; ?>
+                        </div>
+                        <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
+                        <p class="ig-dono">Dono do Site</p>
+                        <?php endif; ?>
+                        <div class="ig-actions">
+                            <?php if ($is_own_profile): ?>
+                            <a class="btn-ig-edit" href="/features/profile/settings.php">Editar perfil</a>
+                            <a class="btn-ig-story" href="/features/profile/upload_story.php"><i class="bi bi-camera" aria-hidden="true"></i> Enviar story</a>
+                            <a class="btn-ig-story" href="/features/chat/salas.php">💬 Salas de chat</a>
+                            <?php if (is_array($profileRow) && strtolower((string) ($profileRow['role'] ?? '')) === 'admin'): ?>
+                            <a class="btn-admin-link" href="/features/admin/index.php" style="margin-top:8px;display:inline-block">Painel admin</a>
+                            <?php endif; ?>
                             <?php endif; ?>
                         </div>
                         <?php if ($is_own_profile && $pendingFollowCount > 0 && $pendingFollowRows !== []): ?>

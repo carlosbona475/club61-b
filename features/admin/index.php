@@ -6,6 +6,7 @@
  * Segurança: sessão + isCurrentUserAdmin(), CSRF em todo POST, PRG, saída escapada.
  * Requer coluna opcional profiles.status para ban (ex.: 'active' | 'banned').
  *   SQL: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
+ * Acesso admin: profiles.is_admin (boolean) e/ou role = 'admin' — ver config/admin_guard.php.
  */
 
 declare(strict_types=1);
@@ -335,9 +336,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $role = 'membro';
         }
         if ($uid !== '' && $uid !== $current_user_id && ($role === 'admin' || $role === 'membro')) {
+            $patch = [
+                'role' => $role,
+                'is_admin' => $role === 'admin',
+            ];
             admin_json_patch(
                 '/rest/v1/profiles?id=eq.' . urlencode($uid),
-                json_encode(['role' => $role], JSON_UNESCAPED_SLASHES)
+                json_encode($patch, JSON_UNESCAPED_SLASHES)
             );
         }
         admin_redirect_prg('usuarios', 'Função atualizada.', 'ok', $pageQs);
@@ -437,9 +442,11 @@ $new_members_today = admin_count_exact('/rest/v1/profiles?select=id&created_at=g
 $convitesDisp = admin_count_exact('/rest/v1/invites?select=id&used_by=is.null&expires_at=gt.' . rawurlencode($nowIso));
 $convitesUsados = admin_count_exact('/rest/v1/invites?select=id&used_by=not.is.null');
 $totalInvitesAvailable = admin_count_exact('/rest/v1/invites?select=id&status=eq.available');
-$totalAdmins = admin_count_exact('/rest/v1/profiles?select=id&role=eq.admin');
+$totalAdmins = admin_count_exact(
+    '/rest/v1/profiles?select=id&or=(role.eq.admin,is_admin.eq.true)'
+);
 
-$membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,created_at,cidade'
+$membersPath = '/rest/v1/profiles?select=id,display_id,avatar_url,role,status,is_admin,created_at,cidade'
     . '&order=created_at.asc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetMembers;
 $members = admin_json_get_list($membersPath);
 
@@ -1137,7 +1144,7 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
                             <?php
                             $mid = isset($mem['id']) ? (string) $mem['id'] : '';
                             $lbl = clLabel($mem);
-                            $role = isset($mem['role']) ? (string) $mem['role'] : 'membro';
+                            $isAdminRow = club61_profile_row_is_admin($mem);
                             $cidade = isset($mem['cidade']) ? trim((string) $mem['cidade']) : '';
                             $isSelf = ($mid !== '' && $mid === $current_user_id);
                             $cadRow = isset($mem['created_at']) ? admin_format_iso((string) $mem['created_at']) : '—';
@@ -1147,7 +1154,7 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
                                 <td><span class="mono-code" style="font-size:0.95rem"><?= htmlspecialchars($lbl, ENT_QUOTES, 'UTF-8') ?></span></td>
                                 <td style="color:var(--muted)"><?= $cidade !== '' ? htmlspecialchars($cidade, ENT_QUOTES, 'UTF-8') : '—' ?></td>
                                 <td>
-                                    <?php if ($role === 'admin'): ?>
+                                    <?php if ($isAdminRow): ?>
                                         <span class="badge-pill admin">Admin</span>
                                     <?php else: ?>
                                         <span class="badge-pill membro">Membro</span>
@@ -1155,11 +1162,11 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
                                 </td>
                                 <td style="color:var(--muted);white-space:nowrap"><?= htmlspecialchars($cadRow, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
-                                    <?php if ($isSelf && $role === 'admin'): ?>
+                                    <?php if ($isSelf && $isAdminRow): ?>
                                         <button type="button" class="btn-sm btn-danger" disabled title="Não é possível alterar o próprio papel">Remover Admin</button>
                                     <?php elseif ($isSelf): ?>
                                         <span style="color:var(--muted);font-size:0.8rem">—</span>
-                                    <?php elseif ($role !== 'admin'): ?>
+                                    <?php elseif (!$isAdminRow): ?>
                                         <form method="post" action="" style="display:inline">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                                             <input type="hidden" name="return_tab" value="usuarios">

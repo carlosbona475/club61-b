@@ -24,7 +24,7 @@ function admin_fetch_profile_row_by_id(string $userId): ?array
         return null;
     }
 
-    $url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,role,status';
+    $url = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=id,role,status,is_admin';
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -87,7 +87,31 @@ function admin_invalidate_profile_cache(): void
 }
 
 /**
- * True apenas se role === 'admin' e não estiver banido (status === 'banned').
+ * Indica se a linha de perfil é administrador: coluna booleana is_admin (Supabase) ou role === 'admin'.
+ */
+function club61_profile_row_is_admin(array $row): bool
+{
+    $role = strtolower(trim((string) ($row['role'] ?? '')));
+    if ($role === 'admin') {
+        return true;
+    }
+    if (!array_key_exists('is_admin', $row)) {
+        return false;
+    }
+    $flag = $row['is_admin'];
+    if (is_bool($flag)) {
+        return $flag;
+    }
+    if ($flag === null) {
+        return false;
+    }
+    $s = strtolower(trim((string) $flag));
+
+    return $s === '1' || $s === 'true' || $s === 't' || $s === 'yes';
+}
+
+/**
+ * True se is_admin no perfil OU role === 'admin', e não estiver banido (status === 'banned').
  */
 function isCurrentUserAdmin(): bool
 {
@@ -96,15 +120,13 @@ function isCurrentUserAdmin(): bool
         return false;
     }
 
-    $role = strtolower(trim((string) ($row['role'] ?? '')));
     $status = trim((string) ($row['status'] ?? ''));
 
     if ($status === 'banned') {
         return false;
     }
 
-    // Administradores (aceita legado 'Admin' / espaços; não confundir com 'member' / 'membro')
-    return $role === 'admin';
+    return club61_profile_row_is_admin($row);
 }
 
 /**

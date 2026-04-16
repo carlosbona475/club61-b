@@ -287,6 +287,12 @@ $infiniteJs = <<<HTML
         var main = document.querySelector('.feed-main');
         if (!main || cards.length === 0) { done = true; pager.parentElement.style.display='none'; return; }
         cards.forEach(function(c){ main.insertBefore(c, main.querySelector('.feed-pager')); });
+        cards.forEach(function (c) {
+          var rid = c.querySelector('[id^="reactions-"]');
+          if (rid && rid.id && window.club61CarregarReacoes) {
+            window.club61CarregarReacoes(rid.id.replace('reactions-', ''));
+          }
+        });
         var next = box.querySelector('.feed-pager a');
         if (next) pager.href = next.href; else { done = true; pager.parentElement.style.display='none'; }
       })

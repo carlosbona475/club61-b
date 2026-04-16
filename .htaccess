@@ -27,13 +27,17 @@ DirectoryIndex index.php index.html
 
     # API JSON do chat (atalhos /chat/…)
     RewriteRule ^chat/messages/?$ /features/chat/chat_actions.php [L,QSA]
+    RewriteRule ^chat/mensagens/?$ /features/chat/mensagens_get.php [L,QSA]
     RewriteRule ^chat/send/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/enviar/?$ /features/chat/enviar.php [L,QSA]
+    RewriteRule ^chat/poll/?$ /features/chat/poll.php [L,QSA]
     RewriteRule ^chat/react/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/online/?$ /features/chat/chat_actions.php [L,QSA]
     RewriteRule ^chat/presence/?$ /features/chat/chat_actions.php [L,QSA]
 
     RewriteRule ^post/delete/?$ /features/feed/delete_post.php [L,QSA]
+    RewriteRule ^post/reagir/?$ /features/feed/reagir_post.php [L,QSA]
+    RewriteRule ^post/reacoes/?$ /features/feed/reacoes_get.php [L,QSA]
 
     # Follow (JSON)
     RewriteRule ^follow/(enviar|aceitar|recusar|remover)/?$ /features/follow/follow_api.php [L,QSA]

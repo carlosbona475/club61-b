@@ -88,14 +88,17 @@ $meProf = club61_chat_fetch_profiles_by_ids([$current_user_id]);
 $myMemberLine = isset($meProf[$current_user_id]) ? club61_chat_member_line($meProf[$current_user_id]) : '';
 
 $lastIso = '';
+$lastMsgId = '';
 if ($initialMessages !== []) {
     $last = $initialMessages[count($initialMessages) - 1];
     $lastIso = isset($last['created_at']) ? (string) $last['created_at'] : '';
+    $lastMsgId = isset($last['id']) ? (string) $last['id'] : '';
 }
 
 $chatApi = '/features/chat/chat_actions.php';
 /** Caminhos absolutos na raiz do site; /chat/* exige mod_rewrite (veja .htaccess). Fallback sempre funciona. */
 $chatEp = [
+    'mensagens' => '/chat/mensagens',
     'messages' => $chatApi . '?r=messages',
     'messagesShort' => '/chat/messages',
     'send' => '/chat/enviar',
@@ -287,7 +290,7 @@ body.gm-body{
   </aside>
 
   <section class="uol-main" aria-label="Conversa">
-    <div class="uol-feed" id="chatFeed" data-sala="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
+    <div class="uol-feed" id="chat-feed" data-sala="<?= htmlspecialchars($sala, ENT_QUOTES, 'UTF-8') ?>">
 <?php
 $prevDay = null;
 foreach ($initialMessages as $m):
@@ -444,11 +447,13 @@ function cancelarMidia() {
   var currentUserId = <?= json_encode($current_user_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
   var EP = <?= json_encode($chatEp, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
   var lastIso = <?= json_encode($lastIso, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var ultimoId = <?= json_encode($lastMsgId, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
   var allowedReact = <?= json_encode(CLUB61_CHAT_ALLOWED_REACTION_EMOJIS, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var __chatSendInFlight = false;
   var myLineAttr = document.body.getAttribute('data-my-line') || '';
 
   function $(sel) { return document.querySelector(sel); }
-  function feedEl() { return document.getElementById('chatFeed'); }
+  function feedEl() { return document.getElementById('chat-feed'); }
 
   function scrollFeedBottom() {
     var box = feedEl();
@@ -539,20 +544,24 @@ function cancelarMidia() {
     return '';
   }
 
-  function appendMessages(list) {
+  function appendMessages(list, opts) {
+    opts = opts || {};
     if (!list || !list.length) return;
     var box = feedEl();
+    if (!box) return;
+    var estavaNoBaixo = box.scrollHeight - box.scrollTop <= box.clientHeight + 50;
     var html = '';
     for (var i = 0; i < list.length; i++) {
       var mid = list[i].id || '';
       if (mid && box.querySelector('[data-msg-id="' + mid + '"]')) continue;
       html += buildMsgRow(list[i]);
       lastIso = list[i].created_at || lastIso;
+      if (mid) ultimoId = String(mid);
     }
     if (html) {
       box.insertAdjacentHTML('beforeend', html);
       bindReactButtons(box);
-      scrollFeedBottom();
+      if (opts.forceScroll || estavaNoBaixo) scrollFeedBottom();
     }
   }
 
@@ -587,16 +596,26 @@ function cancelarMidia() {
     });
   }
 
-  function carregarMensagens() {
-    var url = EP.messages + '?sala_id=' + encodeURIComponent(sala);
-    if (lastIso) url += '&after=' + encodeURIComponent(lastIso);
-    fetch(url, { credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (!data || !data.ok || !data.messages) return;
-        appendMessages(data.messages);
-      })
-      .catch(function () {});
+  async function carregarMensagens() {
+    if (__chatSendInFlight) return;
+    var base = EP.mensagens || EP.messages;
+    var url = base + '?sala_id=' + encodeURIComponent(sala);
+    if (ultimoId) {
+      url += '&after=' + encodeURIComponent(ultimoId);
+    } else if (lastIso) {
+      url += '&after=' + encodeURIComponent(lastIso);
+    }
+    try {
+      var res = await fetch(url, { credentials: 'same-origin' });
+      if (!res.ok) return;
+      var data = await res.json();
+      if (!data || data.ok === false) return;
+      var rows = data.mensagens || data.messages;
+      if (!rows || !rows.length) return;
+      appendMessages(rows);
+    } catch (err) {
+      console.error('Erro ao carregar mensagens:', err);
+    }
   }
 
   function typingIndicatorText(list) {
@@ -690,7 +709,6 @@ function cancelarMidia() {
     }).catch(function () {});
   }
 
-  var sendInFlight = false;
   function buildChatFormData() {
     var ta = document.getElementById('input-mensagem');
     var fileEl = document.getElementById('input-arquivo');
@@ -701,93 +719,117 @@ function cancelarMidia() {
     var salaVal = (salaInp && salaInp.value) ? salaInp.value.trim() : sala;
     fd.append('sala_id', salaVal);
     fd.append('mensagem', text);
-    if (hasFile) fd.append('arquivo', fileEl.files[0]);
+    if (hasFile)     fd.append('arquivo', fileEl.files[0]);
     return fd;
-  }
-  function enviarMensagem() {
-    var ta = document.getElementById('input-mensagem');
-    var fileEl = document.getElementById('input-arquivo');
-    var text = (ta && ta.value) ? ta.value.trim() : '';
-    var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
-    if (!text && !hasFile) return;
-    if (sendInFlight) return;
-    var urls = [EP.send];
-    if (EP.sendFallback && EP.sendFallback !== EP.send) urls.push(EP.sendFallback);
-    var btnEnviar = document.getElementById('btn-enviar');
-    sendInFlight = true;
-    if (btnEnviar) {
-      btnEnviar.disabled = true;
-      btnEnviar.textContent = '⏳';
-    }
-    function trySend(i) {
-      if (i >= urls.length) {
-        sendInFlight = false;
-        if (btnEnviar) {
-          btnEnviar.disabled = false;
-          btnEnviar.textContent = '🚀';
-        }
-        alert('Não foi possível enviar. Verifique a rede ou a configuração do servidor.');
-        return;
-      }
-      fetch(urls[i], { method: 'POST', credentials: 'same-origin', body: buildChatFormData() })
-        .then(function (r) {
-          return r.text().then(function (txt) {
-            var j = null;
-            try { j = txt ? JSON.parse(txt) : null; } catch (e) { j = null; }
-            return { r: r, j: j, txt: txt };
-          });
-        })
-        .then(function (o) {
-          var ok = o.j && (o.j.ok === true || o.j.success === true);
-          if (o.r.ok && ok) {
-            if (o.j && o.j.message) {
-              appendMessages([o.j.message]);
-            }
-            if (ta) ta.value = '';
-            cancelarMidia();
-            scrollFeedBottom();
-            sendInFlight = false;
-            if (btnEnviar) {
-              btnEnviar.disabled = false;
-              btnEnviar.textContent = '🚀';
-            }
-            return;
-          }
-          if (o.r.status === 404 && i + 1 < urls.length) {
-            trySend(i + 1);
-            return;
-          }
-          sendInFlight = false;
-          if (btnEnviar) {
-            btnEnviar.disabled = false;
-            btnEnviar.textContent = '🚀';
-          }
-          var msg = (o.j && (o.j.message || o.j.detail)) ? String(o.j.message || o.j.detail) : (o.txt || ('HTTP ' + o.r.status));
-          console.error('chat send', o.r.status, o.j || o.txt);
-          alert('Erro ao enviar: ' + msg);
-        })
-        .catch(function (err) {
-          if (i + 1 < urls.length) {
-            trySend(i + 1);
-            return;
-          }
-          sendInFlight = false;
-          if (btnEnviar) {
-            btnEnviar.disabled = false;
-            btnEnviar.textContent = '🚀';
-          }
-          console.error('chat send', err);
-          alert('Erro de conexão. Verifique sua internet.');
-        });
-    }
-    trySend(0);
   }
 
   var formChat = document.getElementById('form-chat');
   if (formChat) {
-    formChat.addEventListener('submit', function (e) {
+    formChat.addEventListener('submit', async function (e) {
       e.preventDefault();
-      enviarMensagem();
+      var ta = document.getElementById('input-mensagem');
+      var fileEl = document.getElementById('input-arquivo');
+      var text = (ta && ta.value) ? ta.value.trim() : '';
+      var hasFile = fileEl && fileEl.files && fileEl.files.length > 0;
+      if (!text && !hasFile) return;
+      if (__chatSendInFlight) return;
+      var salaInp = document.querySelector('#form-chat input[name="sala_id"]');
+      var salaVal = (salaInp && salaInp.value) ? salaInp.value.trim() : sala;
+      var urls = [EP.send];
+      if (EP.sendFallback && EP.sendFallback !== EP.send) urls.push(EP.sendFallback);
+      var btnEnviar = document.getElementById('btn-enviar');
+      var savedText = text;
+      var fdMultipart = hasFile ? buildChatFormData() : null;
+      __chatSendInFlight = true;
+      if (ta) {
+        ta.disabled = true;
+        ta.value = '';
+      }
+      if (btnEnviar) {
+        btnEnviar.disabled = true;
+        btnEnviar.textContent = '⏳';
+      }
+      var sentOk = false;
+      try {
+        if (!hasFile) {
+          for (var u = 0; u < urls.length; u++) {
+            var res = await fetch(urls[u], {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sala_id: salaVal, mensagem: savedText })
+            });
+            var j = null;
+            try {
+              j = await res.json();
+            } catch (ex) {
+              j = null;
+            }
+            var ok = j && (j.ok === true || j.success === true);
+            if (res.ok && ok) {
+              sentOk = true;
+              if (j && j.message) {
+                appendMessages([j.message], { forceScroll: true });
+              } else {
+                await carregarMensagens();
+                scrollFeedBottom();
+              }
+              break;
+            }
+            if (res.status === 404 && u + 1 < urls.length) continue;
+            var errMsg = (j && (j.message || j.detail)) ? String(j.message || j.detail) : ('HTTP ' + res.status);
+            alert('Erro ao enviar: ' + errMsg);
+            break;
+          }
+        } else {
+          var fd = fdMultipart;
+          for (var u2 = 0; u2 < urls.length; u2++) {
+            try {
+              var res2 = await fetch(urls[u2], { method: 'POST', credentials: 'same-origin', body: fd });
+              var txt2 = await res2.text();
+              var j2 = null;
+              try { j2 = txt2 ? JSON.parse(txt2) : null; } catch (ex2) { j2 = null; }
+              var ok2 = j2 && (j2.ok === true || j2.success === true);
+              if (res2.ok && ok2) {
+                sentOk = true;
+                if (j2 && j2.message) {
+                  appendMessages([j2.message], { forceScroll: true });
+                } else {
+                  await carregarMensagens();
+                  scrollFeedBottom();
+                }
+                cancelarMidia();
+                break;
+              }
+              if (res2.status === 404 && u2 + 1 < urls.length) continue;
+              var msg2 = (j2 && (j2.message || j2.detail)) ? String(j2.message || j2.detail) : (txt2 || ('HTTP ' + res2.status));
+              console.error('chat send', res2.status, j2 || txt2);
+              alert('Erro ao enviar: ' + msg2);
+              break;
+            } catch (inner2) {
+              if (u2 + 1 < urls.length) continue;
+              throw inner2;
+            }
+          }
+        }
+        if (sentOk && !hasFile) {
+          cancelarMidia();
+        }
+      } catch (err) {
+        console.error('chat send', err);
+        alert('Erro de conexão. Verifique sua internet.');
+      } finally {
+        __chatSendInFlight = false;
+        if (ta) {
+          ta.disabled = false;
+          if (!sentOk) ta.value = savedText;
+          ta.focus();
+        }
+        if (btnEnviar) {
+          btnEnviar.disabled = false;
+          btnEnviar.textContent = '🚀';
+        }
+      }
     });
   }
   var inputMsg = document.getElementById('input-mensagem');
@@ -795,16 +837,26 @@ function cancelarMidia() {
     inputMsg.addEventListener('input', enviarTypingSeNecessario);
   }
 
-  bindReactButtons(document);
-  scrollFeedBottom();
-
-  setInterval(carregarMensagens, 3000);
-  setInterval(atualizarTypingStatus, 2000);
-  setInterval(atualizarOnline, 15000);
-  setInterval(atualizarPresenca, 30000);
-  atualizarPresenca();
-  atualizarOnline();
-  atualizarTypingStatus();
+  async function chatPageBoot() {
+    bindReactButtons(document);
+    scrollFeedBottom();
+    await carregarMensagens();
+    scrollFeedBottom();
+    setInterval(function () {
+      carregarMensagens().catch(function () {});
+    }, 3000);
+    setInterval(atualizarTypingStatus, 2000);
+    setInterval(atualizarOnline, 15000);
+    setInterval(atualizarPresenca, 30000);
+    atualizarPresenca();
+    atualizarOnline();
+    atualizarTypingStatus();
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', function () { chatPageBoot(); });
+  } else {
+    chatPageBoot();
+  }
 
   var side = document.getElementById('uolSidebar');
   var btnPart = document.getElementById('btnParticipantesMobile');

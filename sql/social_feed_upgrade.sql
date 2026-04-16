@@ -8,8 +8,9 @@ CREATE TABLE IF NOT EXISTS public.post_likes (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     post_id     integer NOT NULL REFERENCES public.posts(id) ON DELETE CASCADE,
     user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+    emoji       text NOT NULL DEFAULT '❤️',
     created_at  timestamptz NOT NULL DEFAULT now(),
-    CONSTRAINT post_likes_unique_user_post UNIQUE (post_id, user_id)
+    CONSTRAINT post_likes_unique_user_post_emoji UNIQUE (post_id, user_id, emoji)
 );
 
 CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON public.post_likes(post_id);

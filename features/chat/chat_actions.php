@@ -14,7 +14,11 @@ function club61_chat_api_route(): string
 {
     $uri = $_SERVER['REQUEST_URI'] ?? '';
     $path = parse_url($uri, PHP_URL_PATH) ?: '';
-    if (preg_match('#/chat/(messages|send|enviar|react|online|presence|typing)/?$#', $path, $m)) {
+    if (preg_match('#/chat/(messages|mensagens|send|enviar|react|online|presence|typing)/?$#', $path, $m)) {
+        if ($m[1] === 'mensagens') {
+            return 'messages';
+        }
+
         return $m[1] === 'enviar' ? 'send' : $m[1];
     }
     $r = trim((string) ($_GET['r'] ?? ''));
@@ -63,8 +67,18 @@ if ($route === 'messages' && $method === 'GET') {
         club61_chat_json_response(400, ['ok' => false, 'error' => 'sala']);
     }
     $after = trim((string) ($_GET['after'] ?? ''));
-    /** Sem `after`: últimas mensagens (histórico). Com `after`: apenas mais novas que o timestamp. */
-    $afterIso = $after !== '' ? $after : null;
+    $afterId = trim((string) ($_GET['after_id'] ?? ''));
+    /** Sem filtro: últimas mensagens (histórico). Com `after_id` ou `after`: apenas mais novas. */
+    $afterIso = null;
+    if ($afterId !== '') {
+        $probe = club61_chat_fetch_message_by_id($afterId);
+        if (is_array($probe) && isset($probe['created_at'], $probe['sala_id'])
+            && (string) $probe['sala_id'] === $salaId) {
+            $afterIso = (string) $probe['created_at'];
+        }
+    } elseif ($after !== '') {
+        $afterIso = $after;
+    }
     $rows = club61_chat_fetch_messages_for_sala($salaId, $afterIso, 120);
     $enriched = club61_chat_enrich_messages($rows);
     club61_chat_json_response(200, ['ok' => true, 'messages' => $enriched]);

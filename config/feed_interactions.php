@@ -18,6 +18,27 @@ function feed_sk_available(): bool
 /** @var bool|null */
 $GLOBALS['_club61_post_likes_probe'] = null;
 
+/** Emoji padrão (compatível com toggle_like legado). */
+function feed_default_like_emoji(): string
+{
+    return '❤️';
+}
+
+/** Emojis permitidos no picker / API (evita lixo na coluna). */
+function feed_allowed_reaction_emojis(): array
+{
+    return ['❤️', '😂', '😮', '😢', '🔥', '👏'];
+}
+
+function feed_reaction_emoji_valid(?string $emoji): bool
+{
+    if ($emoji === null || $emoji === '') {
+        return false;
+    }
+
+    return in_array($emoji, feed_allowed_reaction_emojis(), true);
+}
+
 function feed_post_likes_table_ready(): bool
 {
     if ($GLOBALS['_club61_post_likes_probe'] !== null) {
@@ -181,7 +202,8 @@ function feed_toggle_post_likes_row(string $userId, int $postId): array
 
         return $fail;
     }
-    $checkUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId) . '&select=id';
+    $checkUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId)
+        . '&select=id';
     $ch = curl_init($checkUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -251,6 +273,90 @@ function feed_toggle_post_likes_row(string $userId, int $postId): array
     }
 
     return ['success' => true, 'status' => 'liked', 'error' => null];
+}
+
+/**
+ * Alterna reação (post_id, user_id, emoji): insere ou remove uma linha.
+ *
+ * @return array{success:bool, acao?:string, error?:string}
+ */
+function feed_reagir_toggle(string $userId, int $postId, string $emoji): array
+{
+    $fail = ['success' => false, 'error' => 'toggle_failed'];
+    if ($userId === '' || $postId <= 0 || !feed_sk_available()) {
+        $fail['error'] = 'config';
+
+        return $fail;
+    }
+    if (!feed_reaction_emoji_valid($emoji)) {
+        $fail['error'] = 'invalid_emoji';
+
+        return $fail;
+    }
+    if (!feed_post_likes_table_ready()) {
+        $fail['error'] = 'post_likes_unavailable';
+
+        return $fail;
+    }
+
+    /** Uma linha por (user_id, post_id): mesmo comportamento que toggle_like (alternar). */
+    $r = feed_toggle_post_likes_row($userId, $postId);
+    if (!$r['success'] || $r['status'] === null) {
+        $fail['error'] = $r['error'] ?? 'toggle_failed';
+
+        return $fail;
+    }
+
+    return [
+        'success' => true,
+        'acao' => $r['status'] === 'liked' ? 'adicionado' : 'removido',
+    ];
+}
+
+/**
+ * Lista reações de um post para o JSON do feed (emoji + user_id).
+ *
+ * @return list<array{emoji:string,user_id:string}>
+ */
+function feed_fetch_post_reactions(int $postId): array
+{
+    if ($postId <= 0 || !feed_sk_available() || !feed_post_likes_table_ready()) {
+        return [];
+    }
+    $url = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&select=user_id';
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Accept: application/json',
+        ],
+    ]);
+    $raw = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    if ($raw === false || $code < 200 || $code >= 300) {
+        return [];
+    }
+    $rows = json_decode((string) $raw, true);
+    if (!is_array($rows)) {
+        return [];
+    }
+    $out = [];
+    foreach ($rows as $r) {
+        if (!is_array($r) || !isset($r['user_id'])) {
+            continue;
+        }
+        $out[] = [
+            'emoji' => feed_default_like_emoji(),
+            'user_id' => (string) $r['user_id'],
+        ];
+    }
+
+    return $out;
 }
 
 /**

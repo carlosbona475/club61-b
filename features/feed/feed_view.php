@@ -128,14 +128,27 @@ a{color:inherit}
 .btn-delete-post:hover{opacity:1}
 .post-img-wrap{width:100%;background:#111}
 .post-img{width:100%;display:block;max-height:520px;object-fit:cover;vertical-align:middle}
-.post-actions-row{padding:8px 14px 4px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-.like-btn{
-  background:none;border:none;cursor:pointer;font-size:1.35rem;line-height:1;padding:4px;
-  color:#aaa;transition:transform .15s;
+.post-actions-row{padding:8px 14px 4px;display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.reactions-wrapper{display:inline-block;position:relative;max-width:100%}
+.reactions-count{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px;min-height:0}
+.reaction-badge{
+  background:#1a1a1a;border:1px solid #2a2a2a;border-radius:20px;padding:2px 10px;font-size:13px;cursor:pointer;
+  transition:all .2s;user-select:none;
 }
-.like-btn:hover{transform:scale(1.08)}
-.like-btn.is-liked{color:#ff4b6e}
-.like-count{font-size:0.82rem;color:#bbb;font-weight:600;min-width:1.2em}
+.reaction-badge:hover{border-color:#7B2EFF}
+.reaction-badge.minha{border-color:#7B2EFF;background:rgba(123,46,255,0.15)}
+.btn-curtir{
+  background:transparent;border:1px solid #2a2a2a;color:#aaa;padding:6px 14px;border-radius:20px;cursor:pointer;
+  font-size:14px;transition:all .2s;font-family:inherit;
+}
+.btn-curtir:hover{border-color:#7B2EFF;color:#fff}
+.btn-curtir.ativo{border-color:#7B2EFF;color:#7B2EFF;background:rgba(123,46,255,0.1)}
+.emoji-picker{
+  position:absolute;bottom:44px;left:0;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:30px;
+  padding:8px 12px;display:flex;gap:8px;z-index:999;box-shadow:0 4px 20px rgba(0,0,0,0.5);white-space:nowrap;
+}
+.emoji-picker span{font-size:24px;cursor:pointer;transition:transform .15s;user-select:none;line-height:1}
+.emoji-picker span:hover{transform:scale(1.4)}
 .post-comments{padding:0 14px 8px;font-size:0.82rem;color:#ccc}
 .post-comments .comment-line{margin-bottom:6px;line-height:1.35}
 .post-comments .comment-user{font-weight:600;color:#e8e8e8;margin-right:6px}
@@ -347,9 +360,20 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
       </div>
       <?php endif; ?>
       <div class="post-actions-row">
-        <button type="button" class="like-btn<?= $isLiked ? ' is-liked' : '' ?>" data-like-btn data-post-id="<?= (int) $pid ?>"
-          aria-pressed="<?= $isLiked ? 'true' : 'false' ?>" aria-label="<?= $isLiked ? 'Descurtir' : 'Curtir' ?>"><?= $isLiked ? '♥' : '♡' ?></button>
-        <span class="like-count" data-like-count><?= (int) $likeTotal ?></span>
+        <div class="reactions-wrapper">
+          <div class="reactions-count" id="reactions-<?= (int) $pid ?>"></div>
+          <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)">
+            🤍 Curtir
+          </button>
+          <div class="emoji-picker" id="picker-<?= (int) $pid ?>" style="display:none;" aria-hidden="true">
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('❤️', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">❤️</span>
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😂', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😂</span>
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😮', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😮</span>
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😢', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😢</span>
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('🔥', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">🔥</span>
+            <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('👏', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">👏</span>
+          </div>
+        </div>
       </div>
       <div class="post-comments" data-comment-list data-post-id="<?= (int) $pid ?>">
         <?php foreach ($rawComments as $cr): ?>
@@ -443,28 +467,6 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
       try { return JSON.parse(txt); } catch (e) { return null; }
     });
   }
-  function likeFallback(postId, liked) {
-    var f = document.createElement('form');
-    f.method = 'POST';
-    f.action = liked ? '/features/feed/unlike_post.php' : '/features/feed/like_post.php';
-    var p = document.createElement('input');
-    p.type = 'hidden';
-    p.name = 'post_id';
-    p.value = String(postId);
-    var r = document.createElement('input');
-    r.type = 'hidden';
-    r.name = 'return_to';
-    r.value = window.location.pathname + window.location.search;
-    var c = document.createElement('input');
-    c.type = 'hidden';
-    c.name = 'csrf';
-    c.value = <?= json_encode(csrf_token(), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-    f.appendChild(p);
-    f.appendChild(r);
-    f.appendChild(c);
-    document.body.appendChild(f);
-    f.submit();
-  }
   try {
     var locKey = 'club61_location_updated_at';
     var raw = localStorage.getItem(locKey);
@@ -485,47 +487,92 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
     toast.style.display = 'block';
     setTimeout(function(){ toast.style.display = 'none'; }, 3000);
   }
-  document.addEventListener('click', function(ev){
-    var btn = ev.target && ev.target.closest ? ev.target.closest('[data-like-btn]') : null;
+  window.club61ToggleEmojiPicker = function (postId) {
+    document.querySelectorAll('.emoji-picker').forEach(function (p) {
+      if (p.id !== 'picker-' + postId) { p.style.display = 'none'; p.setAttribute('aria-hidden', 'true'); }
+    });
+    var picker = document.getElementById('picker-' + postId);
+    if (!picker) return;
+    var show = picker.style.display === 'none' || picker.style.display === '';
+    picker.style.display = show ? 'flex' : 'none';
+    picker.setAttribute('aria-hidden', show ? 'false' : 'true');
+  };
+  document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (t && t.closest && t.closest('.reactions-wrapper')) return;
+    document.querySelectorAll('.emoji-picker').forEach(function (p) {
+      p.style.display = 'none';
+      p.setAttribute('aria-hidden', 'true');
+    });
+  });
+  function club61SyncCurtirAtivo(postId) {
+    var el = document.getElementById('reactions-' + postId);
+    var wrap = el && el.closest('.reactions-wrapper');
+    var btn = wrap && wrap.querySelector('.btn-curtir');
     if (!btn) return;
-    ev.preventDefault();
-    var pid = btn.getAttribute('data-post-id');
-    if (!pid) return;
-    var fd = new FormData();
-    fd.append('post_id', pid);
-    fd.append('csrf', FEED_CSRF);
-    btn.disabled = true;
-    fetch('/features/feed/toggle_like.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+    var has = !!(wrap && wrap.querySelector('.reaction-badge.minha'));
+    btn.classList.toggle('ativo', has);
+  }
+  window.club61CarregarReacoes = function (postId) {
+    fetch('/post/reacoes?post_id=' + encodeURIComponent(postId), { credentials: 'same-origin' })
       .then(parseJsonSafe)
-      .then(function(d){
-        if (!d) {
-          likeFallback(pid, btn.classList.contains('is-liked'));
+      .then(function (data) {
+        var container = document.getElementById('reactions-' + postId);
+        if (!container || !data) return;
+        var reacoes = data.reacoes;
+        if (!reacoes || reacoes.length === 0) {
+          container.innerHTML = '';
+          club61SyncCurtirAtivo(postId);
           return;
         }
-        if (d.csrf) FEED_CSRF = d.csrf;
-        if (!d.ok || (d.status !== 'liked' && d.status !== 'unliked')) {
-          if (d.error === 'csrf') {
-            feedToast('Sessão expirada. Atualizando página...', 'error');
-            setTimeout(function(){ window.location.reload(); }, 600);
-            return;
-          }
-          feedToast('Falha ao curtir. Tentando modo compatível...', 'error');
-          likeFallback(pid, btn.classList.contains('is-liked'));
+        var grupos = {};
+        reacoes.forEach(function (r) {
+          var em = r.emoji;
+          if (!grupos[em]) grupos[em] = { count: 0, minha: false };
+          grupos[em].count++;
+          if (r.is_minha) grupos[em].minha = true;
+        });
+        container.innerHTML = Object.keys(grupos).map(function (emoji) {
+          var info = grupos[emoji];
+          var cls = 'reaction-badge' + (info.minha ? ' minha' : '');
+          return '<span class="' + cls + '" onclick="club61Reagir(' + JSON.stringify(String(postId)) + ',' + JSON.stringify(emoji) + ')" title="Clique para alternar">' +
+            emoji + ' ' + info.count + '</span>';
+        }).join('');
+        club61SyncCurtirAtivo(postId);
+      })
+      .catch(function () {});
+  };
+  window.club61Reagir = function (postId, emoji) {
+    var picker = document.getElementById('picker-' + postId);
+    if (picker) {
+      picker.style.display = 'none';
+      picker.setAttribute('aria-hidden', 'true');
+    }
+    fetch('/post/reagir', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({ post_id: postId, emoji: emoji, csrf: FEED_CSRF })
+    })
+      .then(parseJsonSafe)
+      .then(function (data) {
+        if (!data) return;
+        if (data.csrf) FEED_CSRF = data.csrf;
+        if (data.success) {
+          club61CarregarReacoes(postId);
           return;
         }
-        var card = btn.closest('.post-block');
-        var cnt = card ? card.querySelector('[data-like-count]') : null;
-        if (cnt && typeof d.likes_count === 'number') cnt.textContent = d.likes_count;
-        btn.classList.toggle('is-liked', !!d.liked);
-        btn.setAttribute('aria-pressed', d.liked ? 'true' : 'false');
-        btn.setAttribute('aria-label', d.liked ? 'Descurtir' : 'Curtir');
-        btn.innerHTML = d.liked ? '♥' : '♡';
+        if (data.message && data.message.indexOf('Sessão') !== -1) {
+          feedToast('Sessão expirada. Atualizando página...', 'error');
+          setTimeout(function () { window.location.reload(); }, 600);
+          return;
+        }
+        feedToast(data.message || 'Não foi possível reagir.', 'error');
       })
-      .catch(function(){
-        feedToast('Falha de rede ao curtir. Tentando modo compatível...', 'error');
-        likeFallback(pid, btn.classList.contains('is-liked'));
-      })
-      .finally(function(){ btn.disabled = false; });
+      .catch(function () { feedToast('Erro de rede ao reagir.', 'error'); });
+  };
+  document.querySelectorAll('[id^="reactions-"]').forEach(function (el) {
+    club61CarregarReacoes(el.id.replace('reactions-', ''));
   });
   document.addEventListener('submit', function(ev){
     var form = ev.target && ev.target.matches && ev.target.matches('[data-comment-form]') ? ev.target : null;

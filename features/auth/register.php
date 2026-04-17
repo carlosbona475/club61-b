@@ -14,23 +14,33 @@ require_once CLUB61_ROOT . '/config/csrf.php';
 
 /**
  * Normaliza o código de convite para bater em public.invites.code (formato antigo CL-… e hex novo).
- * Ordem: trim → remove espaços internos → maiúsculas → remove prefixo CL- (case-insensitive) → remove todos os hífens.
+ * Ordem: trim → remove espaços → remove prefixo CL- (case-insensitive) → remove hífens → minúsculas (hex na BD).
  *
  * @return array{code: string, cl_prefix_removed: bool}
  */
 function club61_normalize_invite_code_for_lookup(string $raw): array
 {
-    $s = strtoupper(preg_replace('/\s+/', '', trim($raw)));
+    // 1) remove espaços e trim
+    $s = preg_replace('/\s+/', '', trim($raw));
+
     $clPrefixRemoved = false;
 
-    if (str_starts_with($s, 'CL-')) {
-        $s = substr($s, 3);
+    // 2) remove prefixo CL- (case-insensitive)
+    if (preg_match('/^CL-/i', $s)) {
+        $s = preg_replace('/^CL-/i', '', $s);
         $clPrefixRemoved = true;
     }
 
+    // 3) remove hífens (ex: XXXX-YYYY -> XXXXXXXX)
     $s = str_replace('-', '', $s);
 
-    return ['code' => $s, 'cl_prefix_removed' => $clPrefixRemoved];
+    // 4) NORMALIZA PARA MINÚSCULO (convites gravados em hex minúsculo)
+    $s = strtolower($s);
+
+    return [
+        'code' => $s,
+        'cl_prefix_removed' => $clPrefixRemoved,
+    ];
 }
 
 club61_security_headers();

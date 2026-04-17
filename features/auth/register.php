@@ -13,6 +13,25 @@ require_once CLUB61_ROOT . '/services/auth_service.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 
+/**
+ * Normaliza o código de convite para bater em public.invites.code (formato antigo CL-… e hex novo).
+ * Ordem: trim → remove espaços internos → maiúsculas → remove prefixo CL- (case-insensitive) → remove todos os hífens.
+ *
+ * @return array{code: string, cl_prefix_removed: bool}
+ */
+function club61_normalize_invite_code_for_lookup(string $raw): array
+{
+    $s = strtoupper(preg_replace('/\s+/', '', trim($raw)));
+    $clPrefixRemoved = false;
+    if (str_starts_with($s, 'CL-')) {
+        $s = substr($s, 3);
+        $clPrefixRemoved = true;
+    }
+    $s = str_replace('-', '', $s);
+
+    return ['code' => $s, 'cl_prefix_removed' => $clPrefixRemoved];
+}
+
 club61_security_headers();
 club61_session_start_safe();
 
@@ -54,6 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 }
 
 $invite_id = null;
+$invite_code_norm = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
@@ -62,7 +82,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-    $invite_code_norm = strtoupper(preg_replace('/\s+/', '', (string) $invite_code));
+    $normPack = club61_normalize_invite_code_for_lookup((string) $invite_code);
+    $invite_code_norm = $normPack['code'];
+    if ($invite_code_norm === '') {
+        $errorMessage = 'Convite inválido, já utilizado ou expirado.';
+    } else {
+        error_log(
+            '[club61-register] invite_lookup len=' . (string) strlen($invite_code_norm)
+            . ' cl_prefix_removed=' . ($normPack['cl_prefix_removed'] ? '1' : '0')
+        );
+    }
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $nowIso = gmdate('Y-m-d\TH:i:s\Z');
     $q = '/rest/v1/invites?code=eq.' . rawurlencode($invite_code_norm)
         . '&used_by=is.null'
@@ -100,7 +132,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
-    $result = registerUser($email, $password, $invite_code);
+    $result = registerUser($email, $password, $invite_code_norm);
 
     if ($result['success']) {
         $newUserId = isset($result['user_id']) ? trim((string) $result['user_id']) : '';

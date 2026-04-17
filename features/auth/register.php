@@ -57,7 +57,7 @@ $invite_id = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     if (!defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
-        $errorMessage = 'Serviço de convites indisponível (SUPABASE_SERVICE_KEY).';
+        $errorMessage = 'Servico de convites indisponivel (SUPABASE_SERVICE_KEY).';
     }
 }
 

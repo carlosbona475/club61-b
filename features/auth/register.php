@@ -1,6 +1,5 @@
 <?php
 
-
 declare(strict_types=1);
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';
@@ -23,10 +22,12 @@ function club61_normalize_invite_code_for_lookup(string $raw): array
 {
     $s = strtoupper(preg_replace('/\s+/', '', trim($raw)));
     $clPrefixRemoved = false;
+
     if (str_starts_with($s, 'CL-')) {
         $s = substr($s, 3);
         $clPrefixRemoved = true;
     }
+
     $s = str_replace('-', '', $s);
 
     return ['code' => $s, 'cl_prefix_removed' => $clPrefixRemoved];
@@ -36,6 +37,11 @@ club61_security_headers();
 club61_session_start_safe();
 
 $errorMessage = '';
+$email = '';
+$password = '';
+$invite_code = '';
+$invite_id = null;
+$invite_code_norm = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $rl = club61_rate_limit_consume('register_post', 8, 3600);
@@ -50,23 +56,44 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     }
 }
 
+/**
+ * Validação: ajuste importante
+ * - Seu código antigo tem prefixo "CL-" e hífens "-", então "alnum_invite" provavelmente bloqueava antes da normalização.
+ * - Aqui garantimos que o input chega na normalização.
+ */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $v = club61_validate($_POST, [
-        'invite_code' => 'required|alnum_invite',
+        'invite_code' => 'required',
         'email' => 'required|email|max:320',
         'password' => 'required|min:8',
     ]);
+
     if (!$v['ok']) {
         $errorMessage = $v['errors'][0] ?? 'Dados inválidos.';
+    } else {
+        $raw = $_POST['invite_code'] ?? '';
+        $raw = is_string($raw) ? $raw : '';
+
+        // Aceita:
+        // 1) hex puro (sem CL e sem hífen): A1B2C3...
+        // 2) antigo: CL-<chunk>-<chunk>... (admite múltiplos blocos separados por '-')
+        $ok = preg_match('/^(?:[A-Fa-f0-9]+|CL-[A-Fa-f0-9]+(?:-[A-Fa-f0-9]+)*)$/', $raw) === 1;
+
+        if (!$ok) {
+            $errorMessage = 'Convite inválido, já utilizado ou expirado.';
+        }
     }
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $invite_code = $_POST['invite_code'] ?? '';
     $invite_code = is_string($invite_code) ? $invite_code : '';
+
     $email = $v['data']['email'];
+
     $password = $_POST['password'] ?? '';
     $password = is_string($password) ? $password : '';
+
     if (strlen($password) > 128) {
         $errorMessage = 'Senha muito longa.';
     }
@@ -84,9 +111,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $normPack = club61_normalize_invite_code_for_lookup((string) $invite_code);
     $invite_code_norm = $normPack['code'];
+
     if ($invite_code_norm === '') {
         $errorMessage = 'Convite inválido, já utilizado ou expirado.';
     } else {
+        // logs mínimos (sem vazar o código)
         error_log(
             '[club61-register] invite_lookup len=' . (string) strlen($invite_code_norm)
             . ' cl_prefix_removed=' . ($normPack['cl_prefix_removed'] ? '1' : '0')
@@ -96,15 +125,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $nowIso = gmdate('Y-m-d\TH:i:s\Z');
+
     $q = '/rest/v1/invites?code=eq.' . rawurlencode($invite_code_norm)
         . '&used_by=is.null'
         . '&expires_at=gt.' . rawurlencode($nowIso);
+
     $url = SUPABASE_URL . $q;
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+    // Mantive como você já tinha para não quebrar ambiente.
+    // Se quiser, depois a gente pode corrigir para TLS verificado (mais seguro).
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
         'apikey: ' . SUPABASE_SERVICE_KEY,
         'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
@@ -136,6 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 
     if ($result['success']) {
         $newUserId = isset($result['user_id']) ? trim((string) $result['user_id']) : '';
+
         if ($newUserId === '') {
             $errorMessage = 'Conta criada, mas não foi possível obter o ID do usuário. Contacte o suporte.';
         } elseif ($invite_id !== null) {
@@ -144,10 +180,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
                 'used_by' => $newUserId,
                 'used_at' => $usedAt,
             ];
+
             if (isset($invite[0]['status'])) {
                 $patchBody['status'] = 'used';
             }
+
             $patchUrl = SUPABASE_URL . '/rest/v1/invites?id=eq.' . rawurlencode((string) $invite_id);
+
             $chUpd = curl_init($patchUrl);
             curl_setopt_array($chUpd, [
                 CURLOPT_RETURNTRANSFER => true,
@@ -162,9 +201,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
                     'Prefer: return=minimal',
                 ],
             ]);
+
             curl_exec($chUpd);
             $patchCode = (int) curl_getinfo($chUpd, CURLINFO_HTTP_CODE);
             curl_close($chUpd);
+
             if ($patchCode < 200 || $patchCode >= 300) {
                 $errorMessage = 'Conta criada, mas o convite não foi marcado como usado. Peça ajuda a um administrador.';
             }
@@ -304,36 +345,36 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     </style>
 </head>
 <body>
-    <div class="auth-wrap">
-        <div class="auth-card">
-            <h1 class="auth-brand">Club61</h1>
-            <p class="auth-sub">Cadastro exclusivo com código de convite. Preencha os dados abaixo.</p>
+<div class="auth-wrap">
+    <div class="auth-card">
+        <h1 class="auth-brand">Club61</h1>
+        <p class="auth-sub">Cadastro exclusivo com código de convite. Preencha os dados abaixo.</p>
 
-            <?php if ($errorMessage): ?>
+        <?php if ($errorMessage): ?>
             <div class="auth-error"><?= htmlspecialchars($errorMessage, ENT_QUOTES, 'UTF-8') ?></div>
-            <?php endif; ?>
+        <?php endif; ?>
 
-            <form class="auth-form" action="" method="POST" autocomplete="on">
-                <?= csrf_field() ?>
-                <div class="field">
-                    <label for="invite_code">Código de convite</label>
-                    <input type="text" id="invite_code" name="invite_code" placeholder="Cole seu código aqui" autocomplete="off" required />
-                </div>
-                <div class="field">
-                    <label for="email">E-mail</label>
-                    <input type="text" name="email" id="email" placeholder="seu@email.com" autocomplete="email" required />
-                </div>
-                <div class="field">
-                    <label for="password">Senha</label>
-                    <input type="password" id="password" name="password" placeholder="Crie uma senha forte" autocomplete="new-password" required />
-                </div>
-                <button class="btn" type="submit">Registrar</button>
-            </form>
+        <form class="auth-form" action="" method="POST" autocomplete="on">
+            <?= csrf_field() ?>
+            <div class="field">
+                <label for="invite_code">Código de convite</label>
+                <input type="text" id="invite_code" name="invite_code" placeholder="Cole seu código aqui" autocomplete="off" required />
+            </div>
+            <div class="field">
+                <label for="email">E-mail</label>
+                <input type="text" name="email" id="email" placeholder="seu@email.com" autocomplete="email" required />
+            </div>
+            <div class="field">
+                <label for="password">Senha</label>
+                <input type="password" id="password" name="password" placeholder="Crie uma senha forte" autocomplete="new-password" required />
+            </div>
+            <button class="btn" type="submit">Registrar</button>
+        </form>
 
-            <p class="auth-foot">
-                <a href="/features/auth/login.php">Já é membro? Entrar</a>
-            </p>
-        </div>
+        <p class="auth-foot">
+            <a href="/features/auth/login.php">Já é membro? Entrar</a>
+        </p>
     </div>
+</div>
 </body>
 </html>

@@ -8,6 +8,7 @@ use Club61\Controllers\LegacyController;
  * Mapa de rotas amigáveis → scripts PHP (Apache: rewrites em .htaccess na raiz).
  *
  * POST /post/delete → features/feed/delete_post.php → LegacyController::deletePost
+ * POST /feed/delete-story → features/feed/feed_delete_story.php → LegacyController::feedDeleteStory
  * POST /post/reagir → features/feed/reagir_post.php; GET /post/reacoes → features/feed/reacoes_get.php
  *
  * Chat JSON (Apache .htaccess): GET /chat/messages, POST /chat/send → chat_actions.php;
@@ -24,6 +25,7 @@ return [
     'GET /admin/' => [LegacyController::class, 'adminPanel'],
 
     'POST /post/delete' => [LegacyController::class, 'deletePost'],
+    'POST /feed/delete-story' => [LegacyController::class, 'feedDeleteStory'],
     'POST /post/reagir' => [LegacyController::class, 'reagirPost'],
     'GET /post/reacoes' => [LegacyController::class, 'reacoesPost'],
 

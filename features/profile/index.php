@@ -134,6 +134,40 @@ if (is_array($profileRow) && isset($profileRow['id']) && trim((string) $profileR
 }
 $is_own_profile = $current_user_id !== null && $profile_lookup_id !== '' && (string) $profile_lookup_id === (string) $current_user_id;
 
+$registerVisit = $current_user_id !== null
+    && $profile_lookup_id !== ''
+    && (string) $profile_lookup_id !== (string) $current_user_id;
+
+$visitorsToday = 0;
+if ($is_own_profile && $current_user_id !== null && (string) $current_user_id !== '' && supabase_service_role_available()) {
+    $since = gmdate('Y-m-d') . 'T00:00:00Z';
+    $chV = curl_init(SUPABASE_URL . '/rest/v1/profile_views'
+        . '?profile_id=eq.' . rawurlencode((string) $current_user_id)
+        . '&viewed_at=gte.' . rawurlencode($since)
+        . '&select=id');
+    curl_setopt_array($chV, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_SSL_VERIFYHOST => false,
+        CURLOPT_HTTPHEADER => [
+            'apikey: ' . SUPABASE_SERVICE_KEY,
+            'Authorization: Bearer ' . SUPABASE_SERVICE_KEY,
+            'Prefer: count=exact',
+            'Range: 0-0',
+        ],
+        CURLOPT_HEADER => true,
+    ]);
+    $respV = curl_exec($chV);
+    $hsz = curl_getinfo($chV, CURLINFO_HEADER_SIZE);
+    curl_close($chV);
+    if ($respV !== false && is_int($hsz)) {
+        $hdrs = substr($respV, 0, $hsz);
+        if (preg_match('/content-range:\s*[^\/]*\/(\d+)/i', $hdrs, $m)) {
+            $visitorsToday = (int) $m[1];
+        }
+    }
+}
+
 // display_id vazio no próprio perfil: atribuir CL sequencial (service_role no helper)
 if (
     is_array($profileRow)
@@ -1247,6 +1281,11 @@ $igShowRel = trim($profileRelationship) !== '';
                             </div>
                             </a>
                         </div>
+                        <?php if ($is_own_profile && $visitorsToday > 0): ?>
+                        <div style="color:#aaa;font-size:13px;margin-top:8px;">
+                            👁 <?= (int) $visitorsToday ?> visitante<?= $visitorsToday !== 1 ? 's' : '' ?> hoje
+                        </div>
+                        <?php endif; ?>
                         <?php if ($profileBio !== ''): ?>
                         <p class="ig-bio"><?= htmlspecialchars($profileBio, ENT_QUOTES, 'UTF-8') ?></p>
                         <?php endif; ?>
@@ -1567,5 +1606,12 @@ $igShowRel = trim($profileRelationship) !== '';
         });
     })();
     </script>
+    <?php if (!empty($registerVisit)): ?>
+    <script>
+    fetch('/features/profile/register_visit.php?profile_id=' + encodeURIComponent(<?= json_encode($profile_lookup_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>), {
+        credentials: 'same-origin'
+    });
+    </script>
+    <?php endif; ?>
 </body>
 </html>

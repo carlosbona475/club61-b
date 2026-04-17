@@ -80,6 +80,16 @@ final class LegacyController
     }
 
     /**
+     * POST /feed/delete-story — apaga story do autor (CSRF + sessão).
+     *
+     * @see features/feed/delete_story.php
+     */
+    public function feedDeleteStory(): void
+    {
+        require dirname(__DIR__, 2) . '/features/feed/delete_story.php';
+    }
+
+    /**
      * POST /post/reagir — alterna reação (emoji) em post_likes.
      * JSON: { post_id, emoji, csrf? } → { success, acao?, message? }
      */

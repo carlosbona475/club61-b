@@ -36,6 +36,7 @@ DirectoryIndex index.php index.html
     RewriteRule ^chat/presence/?$ /features/chat/chat_actions.php [L,QSA]
 
     RewriteRule ^post/delete/?$ /features/feed/delete_post.php [L,QSA]
+    RewriteRule ^feed/delete-story/?$ /features/feed/feed_delete_story.php [L,QSA]
     RewriteRule ^post/reagir/?$ /features/feed/reagir_post.php [L,QSA]
     RewriteRule ^post/reacoes/?$ /features/feed/reacoes_get.php [L,QSA]
 

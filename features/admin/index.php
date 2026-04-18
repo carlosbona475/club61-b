@@ -1573,3 +1573,4 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
 </script>
 </body>
 </html>
+ 

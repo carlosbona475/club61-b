@@ -66,11 +66,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     }
 }
 
-/**
- * Validação: ajuste importante
- * - Seu código antigo tem prefixo "CL-" e hífens "-", então "alnum_invite" provavelmente bloqueava antes da normalização.
- * - Aqui garantimos que o input chega na normalização.
- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $v = club61_validate($_POST, [
         'invite_code' => 'required',
@@ -84,9 +79,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
         $raw = $_POST['invite_code'] ?? '';
         $raw = is_string($raw) ? $raw : '';
 
-        // Aceita:
-        // 1) hex puro (sem CL e sem hífen): A1B2C3...
-        // 2) antigo: CL-<chunk>-<chunk>... (admite múltiplos blocos separados por '-')
         $ok = preg_match('/^(?:[A-Fa-f0-9]+|CL-[A-Fa-f0-9]+(?:-[A-Fa-f0-9]+)*)$/', $raw) === 1;
 
         if (!$ok) {
@@ -125,7 +117,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     if ($invite_code_norm === '') {
         $errorMessage = 'Convite inválido, já utilizado ou expirado.';
     } else {
-        // logs mínimos (sem vazar o código)
         error_log(
             '[club61-register] invite_lookup len=' . (string) strlen($invite_code_norm)
             . ' cl_prefix_removed=' . ($normPack['cl_prefix_removed'] ? '1' : '0')
@@ -136,17 +127,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $errorMessage === '') {
     $nowIso = gmdate('Y-m-d\TH:i:s\Z');
 
+    // Aceita convites sem expiração (expires_at null) OU com expiração futura
     $q = '/rest/v1/invites?code=eq.' . rawurlencode($invite_code_norm)
         . '&used_by=is.null'
-        . '&expires_at=gt.' . rawurlencode($nowIso);
+        . '&or=(expires_at.is.null,expires_at.gt.' . rawurlencode($nowIso) . ')';
 
     $url = SUPABASE_URL . $q;
 
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-
-    // Mantive como você já tinha para não quebrar ambiente.
-    // Se quiser, depois a gente pode corrigir para TLS verificado (mais seguro).
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
 

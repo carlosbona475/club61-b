@@ -168,7 +168,6 @@ function admin_json_get_list(string $pathAndQuery): array
     if (!is_array($rows)) {
         return [];
     }
-    // PostgREST devolve objeto de erro em vez de array de linhas
     if (isset($rows['code'], $rows['message']) && !isset($rows[0])) {
         error_log('[admin] PostgREST: ' . (string) $rows['message']);
         return [];
@@ -176,7 +175,6 @@ function admin_json_get_list(string $pathAndQuery): array
     if ($rows === []) {
         return [];
     }
-    // Lista de registos (preferido)
     if (function_exists('array_is_list')) {
         if (array_is_list($rows)) {
             return $rows;
@@ -188,7 +186,6 @@ function admin_json_get_list(string $pathAndQuery): array
             return $rows;
         }
     }
-    // Único objeto { id: ... }
     if (isset($rows['id'])) {
         return [$rows];
     }
@@ -256,9 +253,6 @@ function admin_now_iso_utc(): string
     return gmdate('Y-m-d\TH:i:s\Z');
 }
 
-/**
- * Rótulo de role na UI (membro | admin; legado member).
- */
 function admin_role_is_membro(string $role): bool
 {
     $r = strtolower(trim($role));
@@ -266,7 +260,6 @@ function admin_role_is_membro(string $role): bool
     return $r === 'membro' || $r === 'member';
 }
 
-/** Início do dia UTC (ISO) para filtros gte */
 function admin_utc_midnight_iso(): string
 {
     return gmdate('Y-m-d\T00:00:00\Z');
@@ -311,7 +304,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $action = (string) ($_POST['action'] ?? '');
     $tab = (string) ($_POST['return_tab'] ?? 'dashboard');
-    // Tabs na URL: dashboard | convites | usuarios | posts | stories (aliases legados abaixo)
     $tabAliasesPost = ['invites' => 'convites', 'members' => 'usuarios'];
     if (isset($tabAliasesPost[$tab])) {
         $tab = $tabAliasesPost[$tab];
@@ -332,12 +324,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'gerar_convite' || $action === 'gen_invite') {
         $code = strtolower(bin2hex(random_bytes(6)));
-        $expires = gmdate('c', time() + 7 * 86400);
+        // MODIFICAÇÃO: validade do convite escolhida pelo admin
+        $expiry_type = isset($_POST['expiry_type']) ? (string) $_POST['expiry_type'] : '30days';
+        if ($expiry_type === 'never') {
+            $expires = null;
+        } elseif ($expiry_type === '7days') {
+            $expires = gmdate('c', time() + 7 * 86400);
+        } else {
+            $expires = gmdate('c', time() + 30 * 86400);
+        }
         $payload = [
             'code' => $code,
             'created_by' => $current_user_id,
-            'expires_at' => $expires,
         ];
+        if ($expires !== null) {
+            $payload['expires_at'] = $expires;
+        }
         admin_json_post('/rest/v1/invites', json_encode($payload, JSON_UNESCAPED_SLASHES));
         admin_redirect_prg('convites', 'Convite gerado: ' . $code, 'ok', $pageQs);
     }
@@ -345,7 +347,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'enviar_convite_email' || $action === 'enviar_convite_sms') {
         require_once CLUB61_ROOT . '/config/invite_notify.php';
         $code = strtolower(bin2hex(random_bytes(6)));
-        $expires = gmdate('c', time() + 7 * 86400);
+        $expires = gmdate('c', time() + 30 * 86400);
         $payload = [
             'code' => $code,
             'created_by' => $current_user_id,
@@ -486,7 +488,6 @@ try {
 $csrf = admin_csrf_token();
 
 $tab = (string) ($_GET['tab'] ?? 'dashboard');
-// Navegação: ?tab=convites|usuarios|... — aliases legados (invites/members) mantidos
 $tabAliasesGet = [
     'invites' => 'convites',
     'members' => 'usuarios',
@@ -519,7 +520,6 @@ $new_members_today = admin_count_exact('/rest/v1/profiles?select=id&created_at=g
 $convitesDisp = admin_count_exact('/rest/v1/invites?select=id&used_by=is.null&expires_at=gt.' . rawurlencode($nowIso));
 $convitesUsados = admin_count_exact('/rest/v1/invites?select=id&used_by=not.is.null');
 $totalInvitesAvailable = admin_count_exact('/rest/v1/invites?select=id&status=eq.available');
-// Admins: role=admin OU (is_admin sem ser já contado em role=admin) — evita filtro or= frágil no PostgREST
 $totalAdmins = admin_count_exact('/rest/v1/profiles?select=id&role=eq.admin')
     + admin_count_exact('/rest/v1/profiles?select=id&is_admin=eq.true&role=neq.admin');
 
@@ -538,7 +538,6 @@ $storiesPath = '/rest/v1/stories?select=id,user_id,image_url,created_at,expires_
     . '&order=created_at.desc&limit=' . ADMIN_PAGE_LIMIT . '&offset=' . $offsetStories;
 $stories = admin_json_get_list($storiesPath);
 
-/** @var array<string, array<string, mixed>> $memberMap */
 $memberMap = [];
 foreach ($members as $row) {
     if (isset($row['id'])) {
@@ -580,7 +579,6 @@ if ($missingStoryAuthors !== []) {
     }
 }
 
-/** @var array<string, string> $displayIdByUserId — display_id público por user id (UUID nunca na UI) */
 $displayIdByUserId = [];
 foreach ($memberMap as $uid => $row) {
     $displayIdByUserId[$uid] = clLabel($row);
@@ -622,9 +620,6 @@ $flashMessage = (string) ($_GET['message'] ?? '');
     exit;
 }
 
-/**
- * @param array<string, mixed>|null $row
- */
 function admin_format_dt(?array $row): string
 {
     $iso = '';
@@ -650,9 +645,6 @@ function admin_format_iso(?string $iso): string
     return $ts !== false ? date('d/m/Y H:i', $ts) : htmlspecialchars($iso, ENT_QUOTES, 'UTF-8');
 }
 
-/**
- * @param array<string, mixed>|null $row
- */
 function admin_truncate_caption(?array $row, int $max = 80): string
 {
     $cap = '';
@@ -899,6 +891,16 @@ function admin_page_url(string $tab, int $mPageNum, int $pPageNum, int $stPageNu
             transition: border-color 0.2s ease;
         }
         .dark-input:focus { border-color: var(--purple); }
+        .dark-select {
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background: #1a1a1a;
+            color: var(--text);
+            font-size: 0.88rem;
+            cursor: pointer;
+            outline: none;
+        }
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -1182,14 +1184,19 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
             <div class="panel-card">
                 <div class="panel-toolbar">
                     <h2>Convites</h2>
-                    <form method="post" action="" style="margin:0">
+                    <form method="post" action="" style="margin:0;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrf, ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="return_tab" value="convites">
                         <input type="hidden" name="m_page" value="<?= (int) $mPage ?>">
                         <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
                         <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
                         <input type="hidden" name="action" value="gerar_convite">
-                        <button type="submit" class="btn-gold">＋ Gerar novo convite</button>
+                        <select name="expiry_type" class="dark-select">
+                            <option value="30days" selected>30 dias</option>
+                            <option value="7days">7 dias</option>
+                            <option value="never">Sem expiração</option>
+                        </select>
+                        <button type="submit" class="btn-gold">＋ Gerar convite</button>
                     </form>
                 </div>
                 <div style="overflow-x:auto">
@@ -1224,7 +1231,7 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
                             <tr>
                                 <td><span class="mono-code"><?= htmlspecialchars($ic, ENT_QUOTES, 'UTF-8') ?></span></td>
                                 <td style="color:var(--muted)"><?= htmlspecialchars(admin_format_iso($crRaw !== '' ? $crRaw : null), ENT_QUOTES, 'UTF-8') ?></td>
-                                <td style="color:var(--muted)"><?= htmlspecialchars(admin_format_iso($expRaw !== '' ? $expRaw : null), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td style="color:var(--muted)"><?= $expRaw !== '' ? htmlspecialchars(admin_format_iso($expRaw), ENT_QUOTES, 'UTF-8') : '<span style="color:#555">Sem expiração</span>' ?></td>
                                 <td>
                                     <?php if ($isUsed): ?>
                                         <span class="badge-pill muted">Usado por <?= htmlspecialchars($usedByDisp, ENT_QUOTES, 'UTF-8') ?></span>
@@ -1573,4 +1580,3 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
 </script>
 </body>
 </html>
- 

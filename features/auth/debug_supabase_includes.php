@@ -7,8 +7,6 @@ require_once CLUB61_ROOT . '/config/session.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/csrf.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
-require_once CLUB61_ROOT . '/auth_guard.php';
-require_once CLUB61_ROOT . '/config/admin_guard.php';
 
 echo 'OK - todos os includes carregados<br>';
 echo 'SUPABASE_URL: ' . (defined('SUPABASE_URL') ? 'definido' : 'FALTA') . '<br>';

@@ -332,14 +332,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'gerar_convite' || $action === 'gen_invite') {
         $code = strtolower(bin2hex(random_bytes(6)));
-        $expiry_type = isset($_POST['expiry_type']) ? (string)$_POST['expiry_type'] : '30days';
-        if ($expiry_type === 'never') {
-            $expires = null;
-        } elseif ($expiry_type === '7days') {
-            $expires = gmdate('c', time() + 7 * 86400);
-        } else {
-            $expires = gmdate('c', time() + 30 * 86400);
-        }
+        $expires = gmdate('c', time() + 7 * 86400);
         $payload = [
             'code' => $code,
             'created_by' => $current_user_id,
@@ -1196,11 +1189,6 @@ $hStory = htmlspecialchars(admin_page_url('stories', $mPage, $pPage, $stPage), E
                         <input type="hidden" name="p_page" value="<?= (int) $pPage ?>">
                         <input type="hidden" name="st_page" value="<?= (int) $stPage ?>">
                         <input type="hidden" name="action" value="gerar_convite">
-                        <select name="expiry_type" style="padding:8px 12px;border-radius:8px;border:1px solid #333;background:#1a1a1a;color:#fff;font-size:0.88rem;margin-right:8px">
-                            <option value="30days" selected>30 dias</option>
-                            <option value="7days">7 dias</option>
-                            <option value="never">Sem expiração</option>
-                        </select>
                         <button type="submit" class="btn-gold">＋ Gerar novo convite</button>
                     </form>
                 </div>

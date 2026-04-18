@@ -1,18 +1,9 @@
 ﻿<?php
-
-/**
- * Painel Admin — Club61
- *
- * Segurança: sessão + isCurrentUserAdmin(), CSRF em todo POST, PRG, saída escapada.
- * Requer coluna opcional profiles.status para ban (ex.: 'active' | 'banned').
- *   SQL: ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status text DEFAULT 'active';
- * Acesso admin: profiles.is_admin (boolean) e/ou role = 'admin' — ver config/admin_guard.php.
- */
-
 declare(strict_types=1);
 
-ini_set('display_errors', '0');
+ini_set('display_errors', '1');
 ini_set('log_errors', '1');
+ini_set('error_log', dirname(__DIR__, 2) . '/php_errors.log');
 error_reporting(E_ALL);
 
 require_once dirname(__DIR__, 2) . '/config/paths.php';

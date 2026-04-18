@@ -339,7 +339,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     ];
 
     if ($action === 'gerar_convite' || $action === 'gen_invite') {
-        $code = strtoupper(bin2hex(random_bytes(6)));
+        $code = strtolower(bin2hex(random_bytes(6)));
         $expires = gmdate('c', time() + 7 * 86400);
         $payload = [
             'code' => $code,
@@ -352,7 +352,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action === 'enviar_convite_email' || $action === 'enviar_convite_sms') {
         require_once CLUB61_ROOT . '/config/invite_notify.php';
-        $code = strtoupper(bin2hex(random_bytes(6)));
+        $code = strtolower(bin2hex(random_bytes(6)));
         $expires = gmdate('c', time() + 7 * 86400);
         $payload = [
             'code' => $code,

@@ -32,7 +32,7 @@ if ($user_id === null || $user_id === '') {
     exit;
 }
 
-$code = strtoupper(bin2hex(random_bytes(4)));
+$code = strtolower(bin2hex(random_bytes(4)));
 
 $data = [
     'code' => $code,

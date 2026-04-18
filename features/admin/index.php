@@ -1,5 +1,6 @@
 ﻿<?php
 declare(strict_types=1);
+// admin panel
 
 ini_set('display_errors', '1');
 ini_set('log_errors', '1');

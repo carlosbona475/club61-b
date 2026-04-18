@@ -7,5 +7,5 @@ if (file_exists($log)) {
         echo htmlspecialchars($line) . '<br>';
     }
 } else {
-    echo 'Arquivo não encontrado: ' . $log;
+    echo 'Arquivo nao encontrado: ' . $log;
 }

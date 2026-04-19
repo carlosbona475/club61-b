@@ -9,3 +9,5 @@ if (!defined('CLUB61_ROOT')) {
 if (!defined('CLUB61_BASE_PATH')) {
     define('CLUB61_BASE_PATH', dirname(__DIR__));
 }
+
+require_once __DIR__ . '/php_polyfills.php';

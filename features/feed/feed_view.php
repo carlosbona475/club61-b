@@ -362,16 +362,16 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
       <div class="post-actions-row">
         <div class="reactions-wrapper">
           <div class="reactions-count" id="reactions-<?= $pid ?>"></div>
-          <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)">
+          <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= club61_json_for_script($pid) ?>)">
             🤍 Curtir
           </button>
           <div class="emoji-picker" id="picker-<?= $pid ?>" style="display:none;" aria-hidden="true">
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('❤️', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">❤️</span>
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😂', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😂</span>
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😮', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😮</span>
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😢', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😢</span>
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('🔥', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">🔥</span>
-            <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('👏', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">👏</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('❤️') ?>)" role="button" tabindex="0">❤️</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😂') ?>)" role="button" tabindex="0">😂</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😮') ?>)" role="button" tabindex="0">😮</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😢') ?>)" role="button" tabindex="0">😢</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('🔥') ?>)" role="button" tabindex="0">🔥</span>
+            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('👏') ?>)" role="button" tabindex="0">👏</span>
           </div>
         </div>
       </div>
@@ -481,7 +481,7 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
       });
     }
   } catch (e) {}
-  var FEED_CSRF = <?= json_encode($feedCsrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var FEED_CSRF = <?= club61_json_for_script($feedCsrf) ?>;
   var toast = document.getElementById('feedToast');
   if (toast) {
     toast.style.display = 'block';
@@ -657,7 +657,7 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
     if (btnPub) { btnPub.disabled = true; btnPub.textContent = 'Publicando...'; }
   });
 
-  var DELETE_POST_URL = <?= json_encode('/features/feed/delete_post.php', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var DELETE_POST_URL = <?= club61_json_for_script('/features/feed/delete_post.php') ?>;
   document.addEventListener('click', function (ev) {
     var btn = ev.target && ev.target.closest ? ev.target.closest('.btn-delete-post') : null;
     if (!btn) return;

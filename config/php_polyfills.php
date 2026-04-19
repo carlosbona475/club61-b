@@ -3,6 +3,23 @@
 declare(strict_types=1);
 
 /**
+ * JSON seguro para embutir em HTML/JS: se json_encode falhar (ex.: UTF-8 inválido), devolve "null"
+ * em vez de string vazia — evita SyntaxError "Unexpected end of input" no browser.
+ *
+ * @param mixed $value
+ */
+function club61_json_for_script($value): string
+{
+    $flags = JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT | JSON_UNESCAPED_UNICODE;
+    if (defined('JSON_INVALID_UTF8_SUBSTITUTE')) {
+        $flags |= JSON_INVALID_UTF8_SUBSTITUTE;
+    }
+    $s = json_encode($value, $flags);
+
+    return $s !== false ? $s : 'null';
+}
+
+/**
  * Funções nativas do PHP 8+ para hospedagem ainda em 7.4 (evita fatal no login / .env).
  */
 if (!function_exists('str_starts_with')) {

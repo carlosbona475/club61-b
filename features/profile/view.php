@@ -706,7 +706,7 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
 
     <script>
     (function () {
-        var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        var PROFILE_CSRF = <?= club61_json_for_script($csrf) ?>;
         var followBtn = document.getElementById('view-follow-btn');
         var followersEl = document.getElementById('view-followers-count');
         if (followBtn) {

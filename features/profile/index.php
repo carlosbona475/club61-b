@@ -1373,7 +1373,7 @@ $igShowRel = trim($profileRelationship) !== '';
 
     <script>
     (function () {
-        var PROFILE_CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+        var PROFILE_CSRF = <?= club61_json_for_script($csrf) ?>;
         var USE_FOLLOWS = <?= club61_follows_service_ok() ? 'true' : 'false' ?>;
         var FOLLOW_API = '/features/follow/follow_api.php';
         var FOLLOW_ENVIAR_URLS = ['/follow/enviar', '/features/follow/follow_api.php?r=enviar'];
@@ -1608,7 +1608,7 @@ $igShowRel = trim($profileRelationship) !== '';
     </script>
     <?php if (!empty($registerVisit)): ?>
     <script>
-    fetch('/features/profile/register_visit.php?profile_id=' + encodeURIComponent(<?= json_encode($profile_lookup_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>), {
+    fetch('/features/profile/register_visit.php?profile_id=' + encodeURIComponent(<?= club61_json_for_script($profile_lookup_id) ?>), {
         credentials: 'same-origin'
     });
     </script>

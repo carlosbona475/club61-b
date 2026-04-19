@@ -213,14 +213,14 @@ $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
   <div class="post-actions-row">
     <div class="reactions-wrapper">
       <div class="reactions-count" id="reactions-<?= $pid ?>"></div>
-      <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)">🤍 Curtir</button>
+      <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= club61_json_for_script($pid) ?>)">🤍 Curtir</button>
       <div class="emoji-picker" id="picker-<?= $pid ?>" style="display:none;" aria-hidden="true">
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('❤️', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">❤️</span>
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😂', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😂</span>
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😮', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😮</span>
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😢', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😢</span>
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('🔥', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">🔥</span>
-        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('👏', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">👏</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('❤️') ?>)" role="button" tabindex="0">❤️</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😂') ?>)" role="button" tabindex="0">😂</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😮') ?>)" role="button" tabindex="0">😮</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😢') ?>)" role="button" tabindex="0">😢</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('🔥') ?>)" role="button" tabindex="0">🔥</span>
+        <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('👏') ?>)" role="button" tabindex="0">👏</span>
       </div>
     </div>
   </div>

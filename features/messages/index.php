@@ -114,10 +114,10 @@ body{
 </div>
 <script>
 (function(){
-  var CSRF = <?= json_encode($csrf, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-  var ME = <?= json_encode($current_user_id, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-  var COM = <?= json_encode($com, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
-  var API = <?= json_encode('/features/messages/messages_api.php', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>;
+  var CSRF = <?= club61_json_for_script($csrf) ?>;
+  var ME = <?= club61_json_for_script($current_user_id) ?>;
+  var COM = <?= club61_json_for_script($com) ?>;
+  var API = <?= club61_json_for_script('/features/messages/messages_api.php') ?>;
 
   var listEl = document.getElementById('msgList');
   var feedEl = document.getElementById('msgFeed');

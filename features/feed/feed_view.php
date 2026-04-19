@@ -362,16 +362,16 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
       <div class="post-actions-row">
         <div class="reactions-wrapper">
           <div class="reactions-count" id="reactions-<?= $pid ?>"></div>
-          <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= club61_json_for_script($pid) ?>)">
+          <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(this.closest('.post-block').dataset.postId)">
             🤍 Curtir
           </button>
           <div class="emoji-picker" id="picker-<?= $pid ?>" style="display:none;" aria-hidden="true">
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('❤️') ?>)" role="button" tabindex="0">❤️</span>
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😂') ?>)" role="button" tabindex="0">😂</span>
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😮') ?>)" role="button" tabindex="0">😮</span>
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('😢') ?>)" role="button" tabindex="0">😢</span>
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('🔥') ?>)" role="button" tabindex="0">🔥</span>
-            <span onclick="club61Reagir(<?= club61_json_for_script($pid) ?>, <?= club61_json_for_script('👏') ?>)" role="button" tabindex="0">👏</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('❤️') ?>)" role="button" tabindex="0">❤️</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('😂') ?>)" role="button" tabindex="0">😂</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('😮') ?>)" role="button" tabindex="0">😮</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('😢') ?>)" role="button" tabindex="0">😢</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('🔥') ?>)" role="button" tabindex="0">🔥</span>
+            <span onclick="club61Reagir(this.closest('.post-block').dataset.postId, <?= club61_json_for_script('👏') ?>)" role="button" tabindex="0">👏</span>
           </div>
         </div>
       </div>

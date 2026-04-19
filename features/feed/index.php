@@ -208,7 +208,7 @@ if ($postAuthorIdList !== [] && $access_token !== '') {
 $postIdsForFeed = [];
 foreach ($posts as $p) {
     if (isset($p['id'])) {
-        $postIdsForFeed[] = (int) $p['id'];
+        $postIdsForFeed[] = trim((string) $p['id']);
     }
 }
 if ($postIdsForFeed !== [] && feed_sk_available()) {

@@ -149,7 +149,7 @@ if ($postAuthorIdList !== [] && $access_token !== '') {
 $postIdsForFeed = [];
 foreach ($posts as $p) {
     if (isset($p['id'])) {
-        $postIdsForFeed[] = (int) $p['id'];
+        $postIdsForFeed[] = trim((string) $p['id']);
     }
 }
 if ($postIdsForFeed !== [] && feed_sk_available()) {
@@ -178,7 +178,7 @@ $feedOlderUrl = '/features/feed/index.php?page=' . ($feedPage + 1);
 <?php foreach ($posts as $post): ?>
 <?php
 
-$pid = (int) ($post['id'] ?? 0);
+$pid = trim((string) ($post['id'] ?? ''));
 $authorId = isset($post['user_id']) ? (string) $post['user_id'] : '';
 $prof = $authorId !== '' && isset($postAuthorById[$authorId]) ? $postAuthorById[$authorId] : null;
 $pdisp = $prof && isset($prof['display_id']) ? trim((string) $prof['display_id']) : '';
@@ -189,12 +189,12 @@ $pOnline = isUserOnline($pLastSeen);
 $createdRaw = isset($post['created_at']) ? (string) $post['created_at'] : '';
 $relTime = FeedFormatting::relativeTime($createdRaw);
 $isLiked = isset($likedPostIds[$pid]);
-$likeTotal = (int) ($likesCountMap[(string) $pid] ?? 0);
+$likeTotal = (int) ($likesCountMap[$pid] ?? 0);
 $rawComments = isset($commentsByPost[$pid]) && is_array($commentsByPost[$pid]) ? $commentsByPost[$pid] : [];
 $profileViewUrl = '/features/profile/view.php?id=' . rawurlencode($authorId);
 $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
 ?>
-<article class="post-block" data-post-id="<?= (int) $pid ?>">
+<article class="post-block" data-post-id="<?= $pid ?>">
   <div class="post-head">
     <a class="post-head-link" href="<?= htmlspecialchars($profileViewUrl, ENT_QUOTES, 'UTF-8') ?>">
       <?php if ($pavatar !== ''): ?>
@@ -205,33 +205,33 @@ $authorHasStory = $authorId !== '' && !empty($feedStoryUserIds[$authorId]);
       <div class="post-head-meta"><div class="post-head-name"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></div><div class="post-head-time"><?= htmlspecialchars($relTime, ENT_QUOTES, 'UTF-8') ?></div></div>
     </a>
     <?php if ($authorId !== '' && isset($current_user_id) && $authorId === (string) $current_user_id): ?>
-    <button type="button" class="btn-delete-post" data-post-id="<?= (int) $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
+    <button type="button" class="btn-delete-post" data-post-id="<?= $pid ?>" title="Excluir post" aria-label="Excluir post">🗑️</button>
     <?php endif; ?>
   </div>
   <?php if (!empty($post['caption'])): ?><div class="post-caption-block"><span class="cap-user"><?= htmlspecialchars($authorLabel, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars((string) $post['caption'], ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
   <?php if (!empty($post['image_url'])): ?><div class="post-img-wrap"><img class="post-img" src="<?= htmlspecialchars((string) $post['image_url'], ENT_QUOTES, 'UTF-8') ?>" alt=""></div><?php endif; ?>
   <div class="post-actions-row">
     <div class="reactions-wrapper">
-      <div class="reactions-count" id="reactions-<?= (int) $pid ?>"></div>
-      <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)">🤍 Curtir</button>
-      <div class="emoji-picker" id="picker-<?= (int) $pid ?>" style="display:none;" aria-hidden="true">
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('❤️', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">❤️</span>
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😂', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😂</span>
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😮', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😮</span>
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😢', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😢</span>
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('🔥', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">🔥</span>
-        <span onclick="club61Reagir(<?= json_encode((string) (int) $pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('👏', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">👏</span>
+      <div class="reactions-count" id="reactions-<?= $pid ?>"></div>
+      <button type="button" class="btn-curtir<?= $isLiked ? ' ativo' : '' ?>" onclick="club61ToggleEmojiPicker(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)">🤍 Curtir</button>
+      <div class="emoji-picker" id="picker-<?= $pid ?>" style="display:none;" aria-hidden="true">
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('❤️', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">❤️</span>
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😂', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😂</span>
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😮', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😮</span>
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('😢', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">😢</span>
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('🔥', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">🔥</span>
+        <span onclick="club61Reagir(<?= json_encode($pid, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>, <?= json_encode('👏', JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) ?>)" role="button" tabindex="0">👏</span>
       </div>
     </div>
   </div>
-  <div class="post-comments" data-comment-list data-post-id="<?= (int) $pid ?>">
+  <div class="post-comments" data-comment-list data-post-id="<?= $pid ?>">
     <?php foreach ($rawComments as $cr): ?>
     <?php $cuid = isset($cr['user_id']) ? (string) $cr['user_id'] : ''; $cpr = $cuid !== '' && isset($commentProfiles[$cuid]) ? $commentProfiles[$cuid] : null; $cdisp = $cpr && isset($cpr['display_id']) ? trim((string) $cpr['display_id']) : ''; $clab = FeedFormatting::buildClLabel($cdisp); $ctxt = isset($cr['comment_text']) ? (string) $cr['comment_text'] : ''; ?>
     <div class="comment-line"><span class="comment-user"><?= htmlspecialchars($clab, ENT_QUOTES, 'UTF-8') ?></span><?= htmlspecialchars($ctxt, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endforeach; ?>
   </div>
-  <a class="post-comments-more" href="/features/feed/post_comments.php?post_id=<?= (int) $pid ?>">Ver todos os comentários</a>
-  <form class="comment-bar" data-comment-form data-post-id="<?= (int) $pid ?>" action="#" method="post">
+  <a class="post-comments-more" href="/features/feed/post_comments.php?post_id=<?= rawurlencode($pid) ?>">Ver todos os comentários</a>
+  <form class="comment-bar" data-comment-form data-post-id="<?= $pid ?>" action="#" method="post">
     <input type="text" name="comment" maxlength="2000" placeholder="Adicione um comentário..." autocomplete="off" aria-label="Comentário"><button type="submit">Enviar</button>
   </form>
 </article>

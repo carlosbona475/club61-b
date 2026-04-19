@@ -12,8 +12,8 @@ require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/feed_interactions.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
 
-$postId = isset($_GET['post_id']) ? (int) $_GET['post_id'] : 0;
-if ($postId <= 0 || !feed_post_exists($postId)) {
+$postId = trim((string) ($_GET['post_id'] ?? ''));
+if ($postId === '' || !feed_post_exists($postId)) {
     http_response_code(404);
     echo 'Post não encontrado.';
 

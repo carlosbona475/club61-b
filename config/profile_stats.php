@@ -107,7 +107,7 @@ function profile_count_likes_received(string $userId): int
     $ids = [];
     foreach ($rows as $r) {
         if (isset($r['id'])) {
-            $ids[] = (int) $r['id'];
+            $ids[] = trim((string) $r['id']);
         }
     }
     if ($ids === []) {

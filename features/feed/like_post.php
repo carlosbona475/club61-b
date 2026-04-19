@@ -21,16 +21,16 @@ if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
 }
 
 $user_id = $_SESSION['user_id'] ?? null;
-$post_id = $_POST['post_id'] ?? null;
+$post_id = trim((string) ($_POST['post_id'] ?? ''));
 
-if ($user_id === null || $post_id === null || !is_numeric($post_id)) {
+if ($user_id === null || $post_id === '') {
     header('Location: /features/feed/index.php?status=error&message=' . urlencode('Dados invalidos para curtida.'));
     exit;
 }
 
 $data = [
     'user_id' => $user_id,
-    'post_id' => (int) $post_id,
+    'post_id' => $post_id,
 ];
 
 $ch = curl_init(SUPABASE_URL . '/rest/v1/likes');

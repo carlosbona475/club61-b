@@ -15,6 +15,23 @@ function feed_sk_available(): bool
     return defined('SUPABASE_URL') && defined('SUPABASE_SERVICE_KEY') && SUPABASE_SERVICE_KEY !== '';
 }
 
+/**
+ * @param list<mixed> $postIds
+ * @return list<string>
+ */
+function feed_normalize_post_ids_for_in_clause(array $postIds): array
+{
+    $seen = [];
+    foreach ($postIds as $x) {
+        $s = trim((string) $x);
+        if ($s !== '') {
+            $seen[$s] = true;
+        }
+    }
+
+    return array_keys($seen);
+}
+
 /** @var bool|null */
 $GLOBALS['_club61_post_likes_probe'] = null;
 
@@ -176,17 +193,18 @@ function feed_count_rows_exact(string $table, string $filterEq): ?int
 /**
  * Curtidas de um post (contagem exata Supabase / PostgREST).
  */
-function getLikesCount(int $postId): int
+function getLikesCount(string $postId): int
 {
-    if ($postId <= 0 || !feed_sk_available()) {
+    if ($postId === '' || !feed_sk_available()) {
         return 0;
     }
+    $enc = rawurlencode($postId);
     if (feed_post_likes_table_ready()) {
-        $n = feed_count_rows_exact('post_likes', 'post_id=eq.' . $postId);
+        $n = feed_count_rows_exact('post_likes', 'post_id=eq.' . $enc);
 
         return $n ?? 0;
     }
-    $n = feed_count_rows_exact('likes', 'post_id=eq.' . $postId);
+    $n = feed_count_rows_exact('likes', 'post_id=eq.' . $enc);
 
     return $n ?? 0;
 }
@@ -194,15 +212,16 @@ function getLikesCount(int $postId): int
 /**
  * @return array{success:bool, status:?string, error:?string}
  */
-function feed_toggle_post_likes_row(string $userId, int $postId): array
+function feed_toggle_post_likes_row(string $userId, string $postId): array
 {
     $fail = ['success' => false, 'status' => null, 'error' => 'toggle_failed'];
-    if ($userId === '' || $postId <= 0 || !feed_sk_available()) {
+    if ($userId === '' || $postId === '' || !feed_sk_available()) {
         $fail['error'] = 'config';
 
         return $fail;
     }
-    $checkUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId)
+    $pidEq = rawurlencode($postId);
+    $checkUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $pidEq . '&user_id=eq.' . urlencode($userId)
         . '&select=id';
     $ch = curl_init($checkUrl);
     curl_setopt_array($ch, [
@@ -227,7 +246,7 @@ function feed_toggle_post_likes_row(string $userId, int $postId): array
     $liked = is_array($existing) && $existing !== [];
 
     if ($liked) {
-        $delUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&user_id=eq.' . urlencode($userId);
+        $delUrl = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $pidEq . '&user_id=eq.' . urlencode($userId);
         $ch = curl_init($delUrl);
         curl_setopt_array($ch, [
             CURLOPT_CUSTOMREQUEST => 'DELETE',
@@ -280,10 +299,10 @@ function feed_toggle_post_likes_row(string $userId, int $postId): array
  *
  * @return array{success:bool, acao?:string, error?:string}
  */
-function feed_reagir_toggle(string $userId, int $postId, string $emoji): array
+function feed_reagir_toggle(string $userId, string $postId, string $emoji): array
 {
     $fail = ['success' => false, 'error' => 'toggle_failed'];
-    if ($userId === '' || $postId <= 0 || !feed_sk_available()) {
+    if ($userId === '' || $postId === '' || !feed_sk_available()) {
         $fail['error'] = 'config';
 
         return $fail;
@@ -318,12 +337,12 @@ function feed_reagir_toggle(string $userId, int $postId, string $emoji): array
  *
  * @return list<array{emoji:string,user_id:string}>
  */
-function feed_fetch_post_reactions(int $postId): array
+function feed_fetch_post_reactions(string $postId): array
 {
-    if ($postId <= 0 || !feed_sk_available() || !feed_post_likes_table_ready()) {
+    if ($postId === '' || !feed_sk_available() || !feed_post_likes_table_ready()) {
         return [];
     }
-    $url = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . $postId . '&select=user_id';
+    $url = SUPABASE_URL . '/rest/v1/post_likes?post_id=eq.' . rawurlencode($postId) . '&select=user_id';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -364,20 +383,21 @@ function feed_fetch_post_reactions(int $postId): array
  *
  * @return array{success:bool, status:?string, error:?string}
  */
-function feed_toggle_legacy_likes_row(string $userId, string $accessToken, int $postId): array
+function feed_toggle_legacy_likes_row(string $userId, string $accessToken, string $postId): array
 {
     $fail = ['success' => false, 'status' => null, 'error' => 'toggle_failed'];
-    if ($userId === '' || $accessToken === '' || $postId <= 0) {
+    if ($userId === '' || $accessToken === '' || $postId === '') {
         $fail['error'] = 'auth';
 
         return $fail;
     }
+    $pidEq = rawurlencode($postId);
     $hdr = [
         'apikey: ' . SUPABASE_ANON_KEY,
         'Authorization: Bearer ' . $accessToken,
         'Accept: application/json',
     ];
-    $checkUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $postId . '&select=id';
+    $checkUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $pidEq . '&select=id';
     $ch = curl_init($checkUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -397,7 +417,7 @@ function feed_toggle_legacy_likes_row(string $userId, string $accessToken, int $
     $liked = is_array($existing) && $existing !== [];
 
     if ($liked) {
-        $delUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $postId;
+        $delUrl = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode($userId) . '&post_id=eq.' . $pidEq;
         $ch = curl_init($delUrl);
         curl_setopt_array($ch, [
             CURLOPT_CUSTOMREQUEST => 'DELETE',
@@ -458,8 +478,7 @@ function feed_get_likes_count_map(array $postIds): array
     if ($postIds === [] || !feed_sk_available()) {
         return [];
     }
-    $ids = array_unique(array_map('intval', $postIds));
-    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    $ids = feed_normalize_post_ids_for_in_clause($postIds);
     if ($ids === []) {
         return [];
     }
@@ -492,7 +511,10 @@ function feed_get_likes_count_map(array $postIds): array
         if (!isset($r['post_id'])) {
             continue;
         }
-        $pid = (string) (int) $r['post_id'];
+        $pid = trim((string) $r['post_id']);
+        if ($pid === '') {
+            continue;
+        }
         $map[$pid] = ($map[$pid] ?? 0) + 1;
     }
 
@@ -500,8 +522,8 @@ function feed_get_likes_count_map(array $postIds): array
 }
 
 /**
- * @param list<int> $postIds
- * @return array<int, true> liked post ids as int keys
+ * @param list<mixed> $postIds
+ * @return array<string, true> liked post ids as string keys
  */
 function feed_get_user_liked_post_ids(string $userId, array $postIds): array
 {
@@ -509,8 +531,7 @@ function feed_get_user_liked_post_ids(string $userId, array $postIds): array
     if ($userId === '' || $postIds === [] || !feed_sk_available()) {
         return $out;
     }
-    $ids = array_unique(array_map('intval', $postIds));
-    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    $ids = feed_normalize_post_ids_for_in_clause($postIds);
     if ($ids === []) {
         return $out;
     }
@@ -541,7 +562,10 @@ function feed_get_user_liked_post_ids(string $userId, array $postIds): array
     }
     foreach ($rows as $r) {
         if (isset($r['post_id'])) {
-            $out[(int) $r['post_id']] = true;
+            $pid = trim((string) $r['post_id']);
+            if ($pid !== '') {
+                $out[$pid] = true;
+            }
         }
     }
 
@@ -549,7 +573,7 @@ function feed_get_user_liked_post_ids(string $userId, array $postIds): array
 }
 
 /**
- * @return array<int, list<array<string,mixed>>> post_id => até $limit comentários (mais recentes primeiro)
+ * @return array<string, list<array<string,mixed>>> post_id => até $limit comentários (mais recentes primeiro)
  */
 function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): array
 {
@@ -557,8 +581,7 @@ function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): ar
     if ($postIds === [] || !feed_sk_available()) {
         return $result;
     }
-    $ids = array_unique(array_map('intval', $postIds));
-    $ids = array_filter($ids, static fn ($x) => $x > 0);
+    $ids = feed_normalize_post_ids_for_in_clause($postIds);
     if ($ids === []) {
         return $result;
     }
@@ -600,8 +623,8 @@ function feed_get_recent_comments_map(array $postIds, int $limitPerPost = 3): ar
         if (!isset($r['post_id'])) {
             continue;
         }
-        $pid = (int) $r['post_id'];
-        if (!isset($result[$pid])) {
+        $pid = trim((string) $r['post_id']);
+        if ($pid === '' || !isset($result[$pid])) {
             continue;
         }
         if (count($result[$pid]) >= $limitPerPost) {
@@ -657,13 +680,14 @@ function feed_fetch_profiles_by_ids(array $userIds): array
     return $out;
 }
 
-function feed_post_exists(int $postId): bool
+function feed_post_exists(string $postId): bool
 {
-    if ($postId <= 0) {
+    if ($postId === '') {
         return false;
     }
+    $idEq = rawurlencode($postId);
     if (feed_sk_available()) {
-        $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id';
+        $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $idEq . '&select=id';
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER => true,
@@ -692,7 +716,7 @@ function feed_post_exists(int $postId): bool
     if ($tok === '' || !defined('SUPABASE_ANON_KEY')) {
         return false;
     }
-    $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id';
+    $url = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $idEq . '&select=id';
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -734,12 +758,12 @@ function feed_csrf_validate(?string $token): bool
 }
 
 /** @deprecated use getLikesCount() */
-function getPostLikesCount(int $postId): int
+function getPostLikesCount(string $postId): int
 {
     return getLikesCount($postId);
 }
 
-function hasUserLiked(string $userId, int $postId): bool
+function hasUserLiked(string $userId, string $postId): bool
 {
     if ($userId === '') {
         return false;
@@ -752,7 +776,7 @@ function hasUserLiked(string $userId, int $postId): bool
 /**
  * @return list<array<string,mixed>>
  */
-function getRecentComments(int $postId, int $limit = 3): array
+function getRecentComments(string $postId, int $limit = 3): array
 {
     $m = feed_get_recent_comments_map([$postId], $limit);
 
@@ -764,9 +788,9 @@ function getRecentComments(int $postId, int $limit = 3): array
  *
  * @return list<array<string,mixed>>
  */
-function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
+function feed_get_all_comments_for_post(string $postId, int $limit = 100): array
 {
-    if ($postId <= 0 || !feed_sk_available()) {
+    if ($postId === '' || !feed_sk_available()) {
         return [];
     }
     $table = feed_post_comments_table_ready() ? 'post_comments' : (feed_comments_table_ready() ? 'comments' : '');
@@ -775,7 +799,7 @@ function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
     }
     $textCol = $table === 'post_comments' ? 'comment_text' : 'text';
     $url = SUPABASE_URL . '/rest/v1/' . $table . '?select=id,post_id,user_id,' . $textCol . ',created_at'
-        . '&post_id=eq.' . $postId
+        . '&post_id=eq.' . rawurlencode($postId)
         . '&order=created_at.asc&limit=' . max(1, min(500, $limit));
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -811,16 +835,17 @@ function feed_get_all_comments_for_post(int $postId, int $limit = 100): array
  *
  * @return array{success:bool, message?:string}
  */
-function feed_delete_owned_post(string $userId, int $postId): array
+function feed_delete_owned_post(string $userId, string $postId): array
 {
-    if ($userId === '' || $postId <= 0) {
+    if ($userId === '' || $postId === '') {
         return ['success' => false, 'message' => 'Pedido inválido.'];
     }
     if (!feed_sk_available() || !defined('SUPABASE_URL') || !defined('SUPABASE_SERVICE_KEY')) {
         return ['success' => false, 'message' => 'Serviço indisponível.'];
     }
+    $idEq = rawurlencode($postId);
 
-    $getUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId . '&select=id,user_id,image_url';
+    $getUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $idEq . '&select=id,user_id,image_url';
     $ch = curl_init($getUrl);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -870,7 +895,7 @@ function feed_delete_owned_post(string $userId, int $postId): array
         }
     }
 
-    $delUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $postId;
+    $delUrl = SUPABASE_URL . '/rest/v1/posts?id=eq.' . $idEq;
     $chD = curl_init($delUrl);
     curl_setopt_array($chD, [
         CURLOPT_RETURNTRANSFER => true,

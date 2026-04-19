@@ -370,7 +370,7 @@ if ($myPostsForGrid !== [] && feed_sk_available()) {
     $pids = [];
     foreach ($myPostsForGrid as $p) {
         if (isset($p['id'])) {
-            $pids[] = (int) $p['id'];
+            $pids[] = trim((string) $p['id']);
         }
     }
     if ($pids !== []) {

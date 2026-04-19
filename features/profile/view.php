@@ -167,7 +167,7 @@ $postsWithImage = array_values(array_filter($posts, function ($p) {
 $postIds = [];
 foreach ($postsWithImage as $p) {
     if (isset($p['id'])) {
-        $postIds[] = (int) $p['id'];
+        $postIds[] = trim((string) $p['id']);
     }
 }
 
@@ -195,8 +195,8 @@ if ($access_token !== '' && $postIds !== []) {
         $likesRows = json_decode($likesBody, true);
         if (is_array($likesRows)) {
             foreach ($likesRows as $lr) {
-                $pid = isset($lr['post_id']) ? (int) $lr['post_id'] : 0;
-                if ($pid <= 0) {
+                $pid = isset($lr['post_id']) ? trim((string) $lr['post_id']) : '';
+                if ($pid === '') {
                     continue;
                 }
                 if (!isset($likeCounts[$pid])) {
@@ -656,7 +656,7 @@ $flash_message = isset($_GET['message']) ? (string) $_GET['message'] : '';
                 <?php foreach ($postsWithImage as $gp): ?>
                     <?php
 
-                    $gpid = (int) ($gp['id'] ?? 0);
+                    $gpid = trim((string) ($gp['id'] ?? ''));
                     $gimg = trim((string) ($gp['image_url'] ?? ''));
                     $gcaption = isset($gp['caption']) ? (string) $gp['caption'] : '';
                     $lc = isset($likeCounts[$gpid]) ? (int) $likeCounts[$gpid] : 0;

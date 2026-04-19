@@ -37,7 +37,7 @@ final class LegacyController
             }
         }
 
-        $postId = isset($input['post_id']) ? (int) $input['post_id'] : (int) ($_POST['post_id'] ?? 0);
+        $postId = trim((string) ($input['post_id'] ?? ($_POST['post_id'] ?? '')));
         $csrf = isset($input['csrf']) ? (string) $input['csrf'] : (string) ($_POST['csrf'] ?? '');
 
         if (!feed_csrf_validate($csrf)) {
@@ -59,7 +59,7 @@ final class LegacyController
             return;
         }
 
-        if ($postId <= 0) {
+        if ($postId === '') {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'Dados inválidos'], JSON_UNESCAPED_UNICODE);
 
@@ -113,7 +113,7 @@ final class LegacyController
             $body = [];
         }
 
-        $postId = isset($body['post_id']) ? (int) $body['post_id'] : 0;
+        $postId = trim((string) ($body['post_id'] ?? ''));
         $emoji = isset($body['emoji']) ? (string) $body['emoji'] : feed_default_like_emoji();
         $csrf = isset($body['csrf']) ? (string) $body['csrf'] : '';
 
@@ -136,7 +136,7 @@ final class LegacyController
             return;
         }
 
-        if ($postId <= 0) {
+        if ($postId === '') {
             http_response_code(400);
             echo json_encode(['success' => false, 'message' => 'post_id inválido'], JSON_UNESCAPED_UNICODE);
 
@@ -192,8 +192,8 @@ final class LegacyController
             return;
         }
 
-        $postId = isset($_GET['post_id']) ? (int) $_GET['post_id'] : 0;
-        if ($postId <= 0) {
+        $postId = trim((string) ($_GET['post_id'] ?? ''));
+        if ($postId === '') {
             echo json_encode(['reacoes' => []], JSON_UNESCAPED_UNICODE);
 
             return;

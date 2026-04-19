@@ -21,14 +21,14 @@ if (!csrf_validate(isset($_POST['csrf']) ? (string) $_POST['csrf'] : null)) {
 }
 
 $user_id = $_SESSION['user_id'] ?? null;
-$post_id = $_POST['post_id'] ?? null;
+$post_id = trim((string) ($_POST['post_id'] ?? ''));
 
-if ($user_id === null || $post_id === null || !is_numeric($post_id)) {
+if ($user_id === null || $post_id === '') {
     header('Location: /features/feed/index.php?status=error&message=' . urlencode('Dados invalidos para descurtir.'));
     exit;
 }
 
-$url = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode((string) $user_id) . '&post_id=eq.' . urlencode((string) ((int) $post_id));
+$url = SUPABASE_URL . '/rest/v1/likes?user_id=eq.' . urlencode((string) $user_id) . '&post_id=eq.' . urlencode($post_id);
 
 $ch = curl_init($url);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);

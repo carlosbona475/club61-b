@@ -40,8 +40,8 @@ if ($userId === '' || $accessToken === '') {
     exit;
 }
 
-$postId = isset($_POST['post_id']) ? (int) $_POST['post_id'] : 0;
-if ($postId <= 0) {
+$postId = trim((string) ($_POST['post_id'] ?? ''));
+if ($postId === '') {
     http_response_code(400);
     echo json_encode(['ok' => false, 'error' => 'invalid_post']);
 

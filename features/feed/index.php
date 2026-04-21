@@ -1,8 +1,6 @@
 <?php
 declare(strict_types=1);
 
-
-
 require_once dirname(__DIR__, 2) . '/config/paths.php';
 
 require_once CLUB61_ROOT . '/auth_guard.php';
@@ -53,7 +51,6 @@ $status = (string) ($_GET['status'] ?? '');
 $message = (string) ($_GET['message'] ?? '');
 $posts = [];
 $storyProfiles = [];
-/** @var array<string, true> ids de utilizadores com story ativo (anel no feed) */
 $feedStoryUserIds = [];
 $membros_ativos = 0;
 $postAuthorById = [];
@@ -149,7 +146,7 @@ if ($access_token !== '' && supabase_service_role_available()) {
     }
 }
 
-$ch = curl_init(SUPABASE_URL . '/rest/v1/posts?select=id,user_id,image_url,caption,created_at&order=created_at.desc&limit=' . $feedPerPage . '&offset=' . $feedOffset);
+$ch = curl_init(SUPABASE_URL . '/rest/v1/posts?select=id,user_id,image_url,video_url,caption,created_at&order=created_at.desc&limit=' . $feedPerPage . '&offset=' . $feedOffset);
 curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
 curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
@@ -235,7 +232,6 @@ $feedHasOlder = count($posts) >= $feedPerPage;
 $feedOlderUrl = '/features/feed/index.php?page=' . ($feedPage + 1);
 $is_admin = isCurrentUserAdmin();
 
-/** Avatar do utilizador atual (header do feed → link para o perfil) */
 $feedMyAvatarUrl = '';
 if ($current_user_id !== '' && $access_token !== '') {
     $meProfUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . rawurlencode($current_user_id) . '&select=avatar_url';
@@ -291,6 +287,10 @@ $infiniteJs = <<<HTML
           var rid = c.querySelector('[id^="reactions-"]');
           if (rid && rid.id && window.club61CarregarReacoes) {
             window.club61CarregarReacoes(rid.id.replace('reactions-', ''));
+          }
+          if ('IntersectionObserver' in window && window._vobs) {
+            var vw = c.querySelector('.post-video-wrap');
+            if (vw) window._vobs.observe(vw);
           }
         });
         var next = box.querySelector('.feed-pager a');

@@ -548,6 +548,7 @@ if (!isset($feedStoryUserIds) || !is_array($feedStoryUserIds)) {
     }, {threshold: 0.6});
     document.querySelectorAll('.post-video-wrap').forEach(function(w){ vobs.observe(w); });
   }
+  window.club61ToggleEmojiPicker = function (postId) {
     document.querySelectorAll('.emoji-picker').forEach(function (p) {
       if (p.id !== 'picker-' + postId) { p.style.display = 'none'; p.setAttribute('aria-hidden', 'true'); }
     });

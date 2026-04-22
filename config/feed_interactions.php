@@ -459,15 +459,31 @@ function feed_toggle_legacy_likes_row(string $userId, string $accessToken, strin
     return ['success' => true, 'status' => 'liked', 'error' => null];
 }
 
-function feed_render_comment_line_html(?string $commentId, string $displayLabel, string $commentText): string
-{
-    $idAttr = ($commentId !== null && $commentId !== '')
+function feed_render_comment_line_html(
+    ?string $commentId,
+    string $displayLabel,
+    string $commentText,
+    string $currentUserId = '',
+    string $postId = ''
+): string {
+    $hasId = $commentId !== null && $commentId !== '';
+    $idAttr = $hasId
         ? ' data-comment-id="' . htmlspecialchars($commentId, ENT_QUOTES, 'UTF-8') . '"'
         : '';
 
+    $delBtn = '';
+    if ($currentUserId !== '' && $hasId) {
+        $delBtn = '<button type="button" class="btn-del-comment"'
+            . ' data-comment-id="' . htmlspecialchars($commentId, ENT_QUOTES, 'UTF-8') . '"'
+            . ' data-post-id="' . htmlspecialchars($postId, ENT_QUOTES, 'UTF-8') . '"'
+            . ' aria-label="Excluir comentário" title="Excluir">×</button>';
+    }
+
     return '<div class="comment-line"' . $idAttr . '><span class="comment-user">'
         . htmlspecialchars($displayLabel, ENT_QUOTES, 'UTF-8') . '</span>'
-        . htmlspecialchars($commentText, ENT_QUOTES, 'UTF-8') . '</div>';
+        . htmlspecialchars($commentText, ENT_QUOTES, 'UTF-8')
+        . $delBtn
+        . '</div>';
 }
 
 /**

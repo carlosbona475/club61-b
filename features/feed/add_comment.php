@@ -163,7 +163,13 @@ $prof = feed_fetch_profiles_by_ids([(string) $userId]);
 $u = $prof[$userId] ?? [];
 $display = club61_display_id_label(isset($u['display_id']) ? (string) $u['display_id'] : null);
 
-$html = feed_render_comment_line_html($cid, (string) $display, $comment);
+$html = feed_render_comment_line_html(
+    $cid,
+    (string) $display,
+    $comment,
+    isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '',
+    $postId
+);
 
 club61_add_comment_json_response([
     'ok' => true,

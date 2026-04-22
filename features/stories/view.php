@@ -7,6 +7,8 @@ require_once dirname(__DIR__, 2) . '/config/paths.php';
 require_once CLUB61_ROOT . '/auth_guard.php';
 require_once CLUB61_ROOT . '/config/supabase.php';
 require_once CLUB61_ROOT . '/config/profile_helper.php';
+require_once CLUB61_ROOT . '/config/feed_interactions.php';
+require_once CLUB61_ROOT . '/config/php_polyfills.php';
 
 $viewerToken = $_SESSION['access_token'] ?? '';
 if ($viewerToken === '') {
@@ -73,6 +75,7 @@ $slidesJson = json_encode($slides, JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_
 
 $currentViewerId = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 $isStoryOwner = $currentViewerId !== '' && $userId !== '' && $currentViewerId === $userId;
+$storyCsrf = feed_csrf_token();
 
 $profUrl = SUPABASE_URL . '/rest/v1/profiles?id=eq.' . urlencode($userId) . '&select=avatar_url,display_id';
 $ch = curl_init($profUrl);
@@ -315,6 +318,87 @@ if (is_array($profRows) && !empty($profRows[0])) {
             text-overflow: ellipsis;
             white-space: nowrap;
         }
+        .story-footer-viewer {
+            position: absolute;
+            right: 16px;
+            bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            z-index: 25;
+        }
+        .story-like-btn {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 20px;
+            padding: 6px 14px;
+            font-size: 1rem;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            line-height: 1;
+            transition: border-color 0.15s ease, color 0.15s ease, transform 0.1s ease;
+            font-family: inherit;
+        }
+        .story-like-btn:hover { border-color: rgba(255, 255, 255, 0.35); }
+        .story-like-btn:active { transform: scale(0.96); }
+        .story-like-btn.liked {
+            border-color: #e0245e;
+            color: #ff5582;
+            background: rgba(224, 36, 94, 0.18);
+        }
+        .story-owner-menu {
+            position: absolute;
+            top: 60px;
+            right: 16px;
+            z-index: 50;
+        }
+        .btn-story-menu {
+            background: rgba(0, 0, 0, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 50%;
+            width: 36px;
+            height: 36px;
+            font-size: 1.2rem;
+            line-height: 1;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            font-family: inherit;
+        }
+        .btn-story-menu:hover { border-color: rgba(255, 255, 255, 0.35); }
+        .story-menu-dropdown {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 44px;
+            background: #1a1a1a;
+            border: 1px solid #333;
+            border-radius: 10px;
+            min-width: 150px;
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+        }
+        .story-menu-dropdown.open { display: block; }
+        .story-menu-item {
+            display: block;
+            width: 100%;
+            padding: 12px 16px;
+            background: none;
+            border: none;
+            color: #e8e8e8;
+            font-size: 0.9rem;
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+        }
+        .story-menu-item:hover { background: rgba(255, 255, 255, 0.08); }
+        .story-menu-item.danger { color: #e33; }
     </style>
 </head>
 <body>
@@ -331,6 +415,14 @@ if (is_array($profRows) && !empty($profRows[0])) {
             </div>
             <button type="button" class="story-close" id="storyClose" aria-label="Fechar">×</button>
         </div>
+        <?php if ($nSlides > 0 && $isStoryOwner): ?>
+        <div class="story-owner-menu">
+            <button type="button" class="btn-story-menu" id="storyMenuBtn" aria-label="Opções do story" aria-haspopup="menu">⋯</button>
+            <div class="story-menu-dropdown" id="storyMenuDropdown" role="menu">
+                <button type="button" class="story-menu-item danger" id="storyDeleteBtn" role="menuitem">🗑️ Excluir story</button>
+            </div>
+        </div>
+        <?php endif; ?>
         <?php if ($nSlides > 0): ?>
         <div class="story-img-wrap">
             <img id="storyImg" src="" alt="Story">
@@ -338,6 +430,13 @@ if (is_array($profRows) && !empty($profRows[0])) {
         <?php if ($isStoryOwner): ?>
         <div class="story-footer" id="storyFooterOwner">
             <button type="button" class="story-views-btn" id="storyViewsBtn" aria-haspopup="dialog">👁 0 visualizações</button>
+        </div>
+        <?php else: ?>
+        <div class="story-footer-viewer" id="storyFooterViewer">
+            <button type="button" class="story-like-btn" id="storyLikeBtn" aria-label="Curtir story">
+                <span id="storyLikeIcon" aria-hidden="true">🤍</span>
+                <span id="storyLikeCount">0</span>
+            </button>
         </div>
         <?php endif; ?>
         <?php else: ?>
@@ -365,6 +464,7 @@ if (is_array($profRows) && !empty($profRows[0])) {
         if (!slides.length) return;
 
         var IS_STORY_OWNER = <?= $isStoryOwner ? 'true' : 'false' ?>;
+        var STORY_CSRF = <?= club61_json_for_script($storyCsrf) ?>;
         var imgEl = document.getElementById('storyImg');
         var row = document.getElementById('progressRow');
         var idx = 0;
@@ -373,6 +473,108 @@ if (is_array($profRows) && !empty($profRows[0])) {
         var viewsModal = document.getElementById('storyViewsModal');
         var viewsList = document.getElementById('storyViewsList');
         var viewsClose = document.getElementById('storyViewsClose');
+        var likeBtn = document.getElementById('storyLikeBtn');
+        var likeIcon = document.getElementById('storyLikeIcon');
+        var likeCountEl = document.getElementById('storyLikeCount');
+        var menuBtn = document.getElementById('storyMenuBtn');
+        var menuDropdown = document.getElementById('storyMenuDropdown');
+        var deleteBtn = document.getElementById('storyDeleteBtn');
+
+        function renderLikeState(liked, count) {
+            if (!likeBtn) return;
+            likeBtn.classList.toggle('liked', !!liked);
+            if (likeIcon) likeIcon.textContent = liked ? '❤️' : '🤍';
+            if (likeCountEl) likeCountEl.textContent = String(count || 0);
+        }
+
+        function loadStoryLikes(storyId) {
+            if (!likeBtn || !storyId) return;
+            fetch('/features/stories/get_likes.php?story_id=' + encodeURIComponent(String(storyId)), {
+                credentials: 'same-origin'
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d) return;
+                    var count = (typeof d.likes_count === 'number') ? d.likes_count
+                              : (typeof d.count === 'number' ? d.count : 0);
+                    renderLikeState(!!d.liked, count);
+                })
+                .catch(function () {});
+        }
+
+        function toggleStoryLike(storyId) {
+            if (!likeBtn || !storyId) return;
+            likeBtn.disabled = true;
+            var fd = new FormData();
+            fd.append('story_id', String(storyId));
+            fd.append('csrf', STORY_CSRF);
+            fetch('/features/stories/toggle_like.php', {
+                method: 'POST',
+                body: fd,
+                credentials: 'same-origin'
+            })
+                .then(function (r) { return r.json(); })
+                .then(function (d) {
+                    if (!d) return;
+                    if (d.csrf) STORY_CSRF = d.csrf;
+                    if (d.ok) {
+                        renderLikeState(!!d.liked, d.likes_count || 0);
+                    }
+                })
+                .catch(function () {})
+                .finally(function () { likeBtn.disabled = false; });
+        }
+
+        if (likeBtn) {
+            likeBtn.addEventListener('click', function () {
+                var cur = slides[idx];
+                if (cur && cur.id) toggleStoryLike(cur.id);
+            });
+        }
+
+        if (menuBtn && menuDropdown) {
+            menuBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                menuDropdown.classList.toggle('open');
+            });
+            document.addEventListener('click', function (e) {
+                if (!menuDropdown.contains(e.target) && e.target !== menuBtn) {
+                    menuDropdown.classList.remove('open');
+                }
+            });
+        }
+
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', function () {
+                if (menuDropdown) menuDropdown.classList.remove('open');
+                if (!confirm('Excluir este story?')) return;
+                var cur = slides[idx];
+                var storyId = cur && cur.id ? String(cur.id) : '';
+                if (!storyId) return;
+                deleteBtn.disabled = true;
+                var fd = new FormData();
+                fd.append('story_id', storyId);
+                fd.append('csrf', STORY_CSRF);
+                fetch('/features/feed/delete_story.php', {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin'
+                })
+                    .then(function (r) { return r.json(); })
+                    .then(function (d) {
+                        if (d && d.ok) {
+                            window.location.href = '/features/feed/index.php';
+                        } else {
+                            alert('Erro ao excluir story.');
+                            deleteBtn.disabled = false;
+                        }
+                    })
+                    .catch(function () {
+                        alert('Erro de rede ao excluir.');
+                        deleteBtn.disabled = false;
+                    });
+            });
+        }
 
         function registerStoryView(storyId) {
             if (!storyId) return;
@@ -493,6 +695,10 @@ if (is_array($profRows) && !empty($profRows[0])) {
             var sid = slides[i] && slides[i].id ? String(slides[i].id) : '';
             registerStoryView(sid);
             refreshViewsCount(sid);
+            if (!IS_STORY_OWNER && likeBtn && sid) {
+                renderLikeState(false, 0);
+                loadStoryLikes(sid);
+            }
 
             clearTimeout(setActive._t);
             setActive._t = setTimeout(function () {

@@ -12,7 +12,7 @@ $userId = isset($_SESSION['user_id']) ? (string) $_SESSION['user_id'] : '';
 $storyId = isset($_GET['story_id']) ? trim((string) $_GET['story_id']) : '';
 
 if ($userId === '' || $storyId === '' || !defined('SUPABASE_SERVICE_KEY') || SUPABASE_SERVICE_KEY === '') {
-    echo json_encode(['count' => 0, 'liked' => false]);
+    echo json_encode(['ok' => false, 'count' => 0, 'likes_count' => 0, 'liked' => false]);
     exit;
 }
 
@@ -43,5 +43,10 @@ foreach ($rows as $r) {
     }
 }
 
-echo json_encode(['count' => $count, 'liked' => $liked]);
+echo json_encode([
+    'ok' => true,
+    'count' => $count,
+    'likes_count' => $count,
+    'liked' => $liked,
+]);
 exit;

@@ -434,16 +434,18 @@ if ($access_token !== '' && $current_user_id !== null && $current_user_id !== ''
     }
 }
 
-if ($is_admin && $access_token !== '' && $current_user_id !== null && $current_user_id !== '') {
-    $url = SUPABASE_URL . '/rest/v1/invites?created_by=eq.' . urlencode((string) $current_user_id);
+if ($is_admin && $current_user_id !== null && $current_user_id !== '' && supabase_service_role_available()) {
+    $invSelect = rawurlencode('id,code,status,expires_at,used_by,used_at,created_at');
+    $url = SUPABASE_URL . '/rest/v1/invites?created_by=eq.' . urlencode((string) $current_user_id)
+        . '&select=' . $invSelect
+        . '&order=created_at.desc';
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array(
-        'apikey: ' . SUPABASE_ANON_KEY,
-        'Authorization: Bearer ' . $access_token,
-    ));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, array_merge(supabase_service_rest_headers(false), [
+        'Accept: application/json',
+    ]));
     $response = curl_exec($ch);
     $statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -723,6 +725,28 @@ $igShowRel = trim($profileRelationship) !== '';
             border-color: rgba(47, 158, 68, 0.35);
             background: rgba(47, 158, 68, 0.1);
         }
+        .invite-status.used {
+            color: #9aa0a6;
+            border-color: rgba(154, 160, 166, 0.3);
+            background: rgba(154, 160, 166, 0.08);
+        }
+        .invite-status.expired {
+            color: #ff6b6b;
+            border-color: rgba(255, 107, 107, 0.3);
+            background: rgba(255, 107, 107, 0.08);
+        }
+        .invite-code-wrap { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+        .btn-copy-invite {
+            background: transparent; border: 1px solid #333; color: #C9A84C;
+            border-radius: 6px; padding: 4px 8px; font-size: 0.85rem; cursor: pointer; line-height: 1;
+            font-family: inherit;
+        }
+        .btn-copy-invite:hover { border-color: #C9A84C; background: rgba(201,168,76,0.08); }
+        .invite-exp {
+            font-size: 0.72rem; color: #888; background: #111; border: 1px solid #2a2a2a;
+            border-radius: 4px; padding: 3px 8px;
+        }
+        .invite-exp.is-expired { color: #ff9a9a; border-color: rgba(255,107,107,0.35); background: rgba(255,107,107,0.08); }
         .empty {
             text-align: center;
             color: #888;
@@ -1347,12 +1371,36 @@ $igShowRel = trim($profileRelationship) !== '';
                     <?php if (empty($invites)): ?>
                         <div class="empty">Nenhum convite gerado ainda.</div>
                     <?php else: ?>
-                        <?php foreach ($invites as $invite): ?>
+                        <?php
+                        $nowTs = time();
+                        foreach ($invites as $invite):
+                            $invCode    = isset($invite['code']) ? (string) $invite['code'] : '';
+                            $invStatus  = isset($invite['status']) ? strtolower((string) $invite['status']) : 'indefinido';
+                            $invExpRaw  = isset($invite['expires_at']) ? (string) $invite['expires_at'] : '';
+                            $invExpTs   = $invExpRaw !== '' ? strtotime($invExpRaw) : false;
+                            $isExpired  = ($invExpTs !== false && $invExpTs > 0 && $invExpTs < $nowTs);
+                            $isUsed     = $invStatus === 'used' || !empty($invite['used_by']);
+                            $isAvailable = !$isUsed && !$isExpired && $invStatus === 'available';
+                            $displayStatus = $isUsed ? 'used' : ($isExpired ? 'expired' : $invStatus);
+                            $inviteLink = 'https://club61.site/features/auth/register.php?invite=' . rawurlencode($invCode);
+                            ?>
                         <div class="invite-row">
-                            <span class="invite-code"><?php echo htmlspecialchars(isset($invite['code']) ? (string) $invite['code'] : '', ENT_QUOTES, 'UTF-8'); ?></span>
-                            <span class="invite-status<?php echo (isset($invite['status']) && (string) $invite['status'] === 'available') ? ' available' : ''; ?>">
-                                <?php echo htmlspecialchars(isset($invite['status']) ? (string) $invite['status'] : 'indefinido', ENT_QUOTES, 'UTF-8'); ?>
+                            <div class="invite-code-wrap">
+                                <span class="invite-code"><?= htmlspecialchars($invCode, ENT_QUOTES, 'UTF-8') ?></span>
+                                <?php if ($isAvailable): ?>
+                                <button type="button" class="btn-copy-invite"
+                                    data-link="<?= htmlspecialchars($inviteLink, ENT_QUOTES, 'UTF-8') ?>"
+                                    title="Copiar link de convite" aria-label="Copiar link de convite">📋</button>
+                                <?php endif; ?>
+                            </div>
+                            <span class="invite-status <?= htmlspecialchars($displayStatus, ENT_QUOTES, 'UTF-8') ?>">
+                                <?= htmlspecialchars($displayStatus, ENT_QUOTES, 'UTF-8') ?>
                             </span>
+                            <?php if ($invExpTs !== false && $invExpTs > 0): ?>
+                            <span class="invite-exp<?= $isExpired ? ' is-expired' : '' ?>">
+                                <?= $isExpired ? 'Expirou em ' : 'Válido até ' ?><?= htmlspecialchars(date('d/m/Y', $invExpTs), ENT_QUOTES, 'UTF-8') ?>
+                            </span>
+                            <?php endif; ?>
                         </div>
                         <?php endforeach; ?>
                     <?php endif; ?>
@@ -1603,6 +1651,45 @@ $igShowRel = trim($profileRelationship) !== '';
         });
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && modal.classList.contains('is-open')) closeModal();
+        });
+
+        document.querySelectorAll('.btn-copy-invite').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var link = btn.getAttribute('data-link') || '';
+                if (!link) return;
+                function flashOk() {
+                    var prev = btn.textContent;
+                    btn.textContent = '✅';
+                    setTimeout(function () { btn.textContent = prev || '📋'; }, 1500);
+                }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(link).then(flashOk).catch(function () {
+                        try {
+                            var ta = document.createElement('textarea');
+                            ta.value = link;
+                            ta.style.position = 'fixed';
+                            ta.style.opacity = '0';
+                            document.body.appendChild(ta);
+                            ta.select();
+                            document.execCommand('copy');
+                            document.body.removeChild(ta);
+                            flashOk();
+                        } catch (e) { /* ignora */ }
+                    });
+                } else {
+                    try {
+                        var ta2 = document.createElement('textarea');
+                        ta2.value = link;
+                        ta2.style.position = 'fixed';
+                        ta2.style.opacity = '0';
+                        document.body.appendChild(ta2);
+                        ta2.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(ta2);
+                        flashOk();
+                    } catch (e) { /* ignora */ }
+                }
+            });
         });
     })();
     </script>

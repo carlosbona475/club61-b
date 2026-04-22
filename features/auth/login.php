@@ -213,6 +213,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
             color: #C9A84C;
             border-bottom-color: rgba(201, 168, 76, 0.5);
         }
+        .cookie-banner {
+            position: fixed; bottom: 0; left: 0; right: 0; z-index: 999;
+            background: #111; border-top: 1px solid #222;
+            padding: 14px 20px;
+            display: flex; align-items: center; justify-content: space-between;
+            gap: 16px; flex-wrap: wrap;
+            font-size: 0.8125rem; color: #888;
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+        .cookie-banner.hide {
+            opacity: 0; transform: translateY(100%); pointer-events: none;
+        }
+        .cookie-banner a { color: #C9A84C; text-decoration: none; }
+        .cookie-banner a:hover { text-decoration: underline; }
+        .cookie-btn {
+            flex-shrink: 0;
+            padding: 8px 20px;
+            background: #C9A84C; color: #000;
+            border: none; border-radius: 4px;
+            font-size: 0.8125rem; font-weight: 600;
+            cursor: pointer; transition: opacity 0.15s;
+        }
+        .cookie-btn:hover { opacity: 0.85; }
     </style>
 </head>
 <body>
@@ -243,5 +266,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $error === '') {
             </p>
         </div>
     </div>
+
+    <div class="cookie-banner" id="cookieBanner">
+        <span>
+            Usamos cookies essenciais para manter sua sessão e segurança do site.
+            <a href="#" tabindex="0">Saiba mais</a>
+        </span>
+        <button class="cookie-btn" id="cookieAccept">Aceitar</button>
+    </div>
+    <script>
+    (function () {
+        var banner = document.getElementById('cookieBanner');
+        var btn = document.getElementById('cookieAccept');
+        if (!banner) return;
+        try {
+            if (localStorage.getItem('club61_cookies_ok') === '1') {
+                banner.style.display = 'none';
+                return;
+            }
+        } catch (e) {}
+        btn.addEventListener('click', function () {
+            banner.classList.add('hide');
+            try { localStorage.setItem('club61_cookies_ok', '1'); } catch (e) {}
+            setTimeout(function () { banner.style.display = 'none'; }, 320);
+        });
+    })();
+    </script>
 </body>
 </html>
